@@ -13,10 +13,7 @@ Description: Valid selective inference for a Hotelling T-squared test comparing
 License: MIT + file LICENSE
 Encoding: UTF-8
 Imports:
-    Rcpp,
     stats
-LinkingTo:
-    Rcpp
 Suggests:
     testthat (>= 3.0.0),
     knitr,

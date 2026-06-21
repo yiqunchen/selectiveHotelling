@@ -177,44 +177,25 @@ kmeans_fun_simple <- function(x, k = 3) {
 #'
 #' @export
 kmeans_with_fixed_init <- function(x, init_centers_idx, max_iter = 50) {
-  # Compiled drop-in: dispatch to the bit-for-bit C++ implementation
-  # (kmeans_fixed_init_cpp). The C++ replicates Lloyd's k-means from a fixed
-  # initialization with full trajectory tracking, matching the pure-R reference
-  # kmeans_with_fixed_init_R() to the last floating-point digit (FP contraction
-  # is disabled so squared distances round exactly as R's rowSums((x - c)^2)).
-  # Consumes NO randomness, so the loop-safe / RNG-safety contract is preserved.
+  # Pure-R Lloyd's k-means from a fixed initialization with full trajectory
+  # tracking, implemented by kmeans_with_fixed_init_R(). Consumes NO randomness,
+  # so the loop-safe / RNG-safety contract is preserved (per-step feasibility
+  # checks inside the MCMC samplers never touch the global RNG stream).
   #
-  # DIMENSION GUARD (performance only; both paths are byte-identical): the C++
-  # scalar loop (FP contraction disabled for exact tie-matching) is faster at
-  # LOW dimension, but R's vectorized rowSums((x - c)^2) beats it at large p
-  # (benchmarks: ~8x faster at p=2, ~1.4x at p=10, ~3x SLOWER at p=50). Use C++
-  # only for small ncol(x); otherwise the vectorized R reference.
+  # NOTE: an earlier compiled (Rcpp) variant was removed. It was bit-for-bit
+  # identical to this R code but gave NO end-to-end speedup for the selective
+  # test -- inside the sampler the re-clustering of a tiny perturbation converges
+  # in ~1 warm iteration, so k-means is a negligible fraction of a sampler step
+  # (measured ~1.00x at p = 2, 10, 50). The package is therefore intentionally
+  # pure R and needs no C++ toolchain.
   if (!is.matrix(x)) x <- as.matrix(x)
-  if (ncol(x) > 6L) {
-    return(kmeans_with_fixed_init_R(x, init_centers_idx, max_iter))
-  }
-  storage.mode(x) <- "double"
-
-  res <- kmeans_fixed_init_cpp(x, as.integer(init_centers_idx),
-                               as.integer(max_iter))
-
-  # Reshape to the EXACT return list the pure-R version produced. In
-  # particular, return the ORIGINAL `init_centers_idx` argument (preserving its
-  # storage mode) rather than the integer-coerced copy round-tripped by C++.
-  list(cluster = res$cluster,
-       trajectory = res$trajectory,
-       center_history = res$center_history,
-       init_centers_idx = init_centers_idx,
-       n_iter = res$n_iter)
+  kmeans_with_fixed_init_R(x, init_centers_idx, max_iter)
 }
 
-#' K-means from a fixed initialization (pure-R reference)
+#' K-means from a fixed initialization (implementation)
 #'
-#' Pure-R reference implementation retained for verification and as a safety
-#' fallback. [kmeans_with_fixed_init()] dispatches to the compiled
-#' `kmeans_fixed_init_cpp()`, which is bit-for-bit identical to this function;
-#' this version is kept so that agreement can be asserted directly and so the
-#' package degrades gracefully if the compiled routine is unavailable.
+#' Pure-R implementation backing [kmeans_with_fixed_init()]. Runs Lloyd's
+#' k-means from a fixed initialization with full trajectory tracking.
 #'
 #' @param x A numeric data matrix with observations in rows.
 #' @param init_centers_idx Integer vector of row indices of `x` used as initial

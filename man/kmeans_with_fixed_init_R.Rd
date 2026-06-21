@@ -2,7 +2,7 @@
 % Please edit documentation in R/kmeans.R
 \name{kmeans_with_fixed_init_R}
 \alias{kmeans_with_fixed_init_R}
-\title{K-means from a fixed initialization (pure-R reference)}
+\title{K-means from a fixed initialization (implementation)}
 \usage{
 kmeans_with_fixed_init_R(x, init_centers_idx, max_iter = 50)
 }
@@ -20,10 +20,7 @@ A list with elements \code{cluster}, \code{trajectory}, \code{center_history},
 \code{\link[=kmeans_with_fixed_init]{kmeans_with_fixed_init()}}).
 }
 \description{
-Pure-R reference implementation retained for verification and as a safety
-fallback. \code{\link[=kmeans_with_fixed_init]{kmeans_with_fixed_init()}} dispatches to the compiled
-\code{kmeans_fixed_init_cpp()}, which is bit-for-bit identical to this function;
-this version is kept so that agreement can be asserted directly and so the
-package degrades gracefully if the compiled routine is unavailable.
+Pure-R implementation backing \code{\link[=kmeans_with_fixed_init]{kmeans_with_fixed_init()}}. Runs Lloyd's
+k-means from a fixed initialization with full trajectory tracking.
 }
 \keyword{internal}

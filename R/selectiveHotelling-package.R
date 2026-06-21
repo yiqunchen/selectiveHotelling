@@ -33,7 +33,5 @@
 #' clustering. *Journal of Machine Learning Research*.
 #'
 #' @keywords internal
-#' @useDynLib selectiveHotelling, .registration = TRUE
-#' @importFrom Rcpp sourceCpp
 #' @importFrom stats cov sd rnorm runif
 "_PACKAGE"
