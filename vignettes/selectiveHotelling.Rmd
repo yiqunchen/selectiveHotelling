@@ -1,0 +1,243 @@
+---
+title: "Selective Hotelling testing after k-means clustering"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Selective Hotelling testing after k-means clustering}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+library(selectiveHotelling)
+set.seed(1)
+```
+
+## The problem
+
+It is common to *cluster* a dataset and then ask whether two of the discovered
+clusters really differ in their means. The trouble is that k-means has already
+used the data to carve out the most-separated grouping, so a standard
+two-sample test applied to those clusters is testing a hypothesis that was
+chosen *because* the data looked separated. The resulting p-values are
+anti-conservative: they reject far too often, even when there is no true
+structure.
+
+`selectiveHotelling` fixes this for the two-sample Hotelling $T^2$ test with an
+**unknown** covariance matrix. It computes a Monte Carlo p-value whose null
+reference distribution conditions on the k-means selection event, so the
+selective Type I error is controlled.
+
+This vignette:
+
+1. Shows that the **naive** Hotelling p-value is anti-conservative on null data.
+2. Shows that `selective_hotelling_test()` is **calibrated** on the same data.
+3. Gives a brief **power** illustration on data with genuinely separated
+   clusters.
+
+All chunks are kept deliberately small (short MCMC runs, few replicates) so the
+vignette builds quickly; for real analyses use more burn-in, more draws, and
+more replicates.
+
+## A global-null dataset
+
+We draw exchangeable (equicorrelated) Gaussian data in which **every**
+observation shares the same mean. Any apparent cluster separation is therefore
+spurious -- this is the null we want a valid test to respect.
+
+```{r one-dataset}
+dat <- generate_exchangeable_null_data(n = 30, p = 2, rho = 0.2)
+X <- dat$dat
+cl <- kmeans_fun(X, k = 3)$cluster
+table(cl)
+```
+
+## The naive Hotelling p-value
+
+The classical two-sample Hotelling $T^2$ converts to an $F$ statistic via
+
+$$
+F = \frac{n_1 + n_2 - p - 1}{p\,(n_1 + n_2 - 2)}\; T^2,
+\qquad
+F \sim F_{p,\; n_1 + n_2 - p - 1}
+$$
+
+under a (fixed, pre-specified) null. The function below returns that naive
+p-value. It is exactly what you would get from a textbook test that ignores the
+clustering.
+
+```{r naive-fun}
+naive_hotelling_p <- function(X, cl, k1, k2) {
+  n1 <- sum(cl == k1); n2 <- sum(cl == k2); p <- ncol(X)
+  T2 <- hotelling_T2(X, cl, k1, k2)
+  if (!is.finite(T2) || (n1 + n2 - p - 1) < 1) return(NA_real_)
+  Fstat <- (n1 + n2 - p - 1) / (p * (n1 + n2 - 2)) * T2
+  stats::pf(Fstat, df1 = p, df2 = n1 + n2 - p - 1, lower.tail = FALSE)
+}
+```
+
+We also need a small helper to pick a pair of clusters that is large enough to
+test (each cluster needs at least a couple of members, and the pooled
+covariance must be invertible).
+
+```{r pick-pair}
+pick_pair <- function(X, cl) {
+  labs <- as.integer(names(which(table(cl) >= 3)))
+  if (length(labs) < 2) return(NULL)
+  combs <- utils::combn(labs, 2)
+  for (j in seq_len(ncol(combs))) {
+    if (is.finite(hotelling_T2(X, cl, combs[1, j], combs[2, j]))) {
+      return(c(combs[1, j], combs[2, j]))
+    }
+  }
+  NULL
+}
+```
+
+On our single null dataset the naive p-value is typically tiny, even though
+there is no real difference in means:
+
+```{r naive-one}
+pr <- pick_pair(X, cl)
+naive_hotelling_p(X, cl, pr[1], pr[2])
+```
+
+### Naive p-values are anti-conservative across replicates
+
+Repeating over several null datasets, the naive p-values cluster near zero
+instead of being spread uniformly over `[0, 1]`. A valid test would reject a
+null at level 0.05 only about 5% of the time; the naive test rejects almost
+always.
+
+```{r naive-reps}
+n_rep <- 15
+naive_p <- rep(NA_real_, n_rep)
+for (r in seq_len(n_rep)) {
+  Xr  <- generate_exchangeable_null_data(n = 30, p = 2, rho = 0.2)$dat
+  clr <- kmeans_fun(Xr, k = 3)$cluster
+  prr <- pick_pair(Xr, clr)
+  if (!is.null(prr)) naive_p[r] <- naive_hotelling_p(Xr, clr, prr[1], prr[2])
+}
+summary(naive_p)
+mean(naive_p <= 0.05, na.rm = TRUE)   # should be ~0.05 for a valid test
+```
+
+The mean is far below 0.5 and the rejection rate is far above 0.05: the naive
+test is badly anti-conservative after clustering.
+
+## The selective Hotelling p-value
+
+`selective_hotelling_test()` instead simulates the null reference distribution
+*conditional on the selection event* by sampling the polar factor $Q$ uniformly
+over the part of the Stiefel manifold consistent with the observed cluster
+pair. Because the polar factor is uniform on the manifold regardless of the
+unknown covariance $\Sigma$, the resulting p-value is valid without estimating
+or knowing $\Sigma$.
+
+We use the supported `condition_on = "final"` path (the default) and short MCMC
+settings for speed.
+
+```{r selective-one}
+res <- selective_hotelling_test(
+  X, k1 = pr[1], k2 = pr[2], K = 3,
+  sampler = "fast",
+  burn = 200, B = 400, thin = 2
+)
+print(res)
+```
+
+### Selective p-values are calibrated across replicates
+
+Running the same replicate loop with the selective test, the p-values are now
+spread across `[0, 1]` with a mean near 0.5, and the level-0.05 rejection rate
+is in the right ballpark (small-sample Monte Carlo noise aside).
+
+```{r selective-reps}
+n_rep <- 15
+sel_p <- rep(NA_real_, n_rep)
+for (r in seq_len(n_rep)) {
+  Xr  <- generate_exchangeable_null_data(n = 30, p = 2, rho = 0.2)$dat
+  clr <- kmeans_fun(Xr, k = 3)$cluster
+  prr <- pick_pair(Xr, clr)
+  if (is.null(prr)) next
+  sel_p[r] <- tryCatch(
+    selective_hotelling_test(
+      Xr, prr[1], prr[2], K = 3, sampler = "fast",
+      burn = 200, B = 400, thin = 2
+    )$pval,
+    error = function(e) NA_real_
+  )
+}
+summary(sel_p)
+mean(sel_p <= 0.05, na.rm = TRUE)   # close to 0.05, unlike the naive test
+```
+
+Side by side, the contrast is stark:
+
+```{r compare}
+data.frame(
+  test            = c("naive", "selective"),
+  mean_pvalue     = c(mean(naive_p, na.rm = TRUE), mean(sel_p, na.rm = TRUE)),
+  reject_at_0.05  = c(mean(naive_p <= 0.05, na.rm = TRUE),
+                      mean(sel_p   <= 0.05, na.rm = TRUE))
+)
+```
+
+## A brief power illustration
+
+Calibration on the null is only useful if the test still has power when there
+is *real* structure. Here we generate three well-separated Gaussian blobs at
+the vertices of a triangle, so any pair of recovered clusters genuinely differs
+in mean. The selective test should now reject.
+
+```{r power}
+make_separated <- function(delta = 6) {
+  centers <- matrix(c(0, 0, delta, 0, delta / 2, delta), 3, 2, byrow = TRUE)
+  do.call(rbind, lapply(1:3, function(j) {
+    matrix(stats::rnorm(12 * 2), 12, 2) +
+      matrix(centers[j, ], 12, 2, byrow = TRUE)
+  }))
+}
+
+n_rep <- 6
+pow_p <- rep(NA_real_, n_rep)
+for (r in seq_len(n_rep)) {
+  Xr  <- make_separated()
+  clr <- kmeans_fun(Xr, k = 3)$cluster
+  tb  <- sort(table(clr), decreasing = TRUE)
+  k1  <- as.integer(names(tb)[1]); k2 <- as.integer(names(tb)[2])
+  pow_p[r] <- selective_hotelling_test(
+    Xr, k1, k2, K = 3, sampler = "fast",
+    burn = 200, B = 400, thin = 2
+  )$pval
+}
+pow_p
+mean(pow_p <= 0.05)   # high power: separated clusters are detected
+```
+
+The selective p-values are at or near the Monte Carlo floor, so the test
+detects the true separation essentially every time -- it controls selective
+Type I error on the null **and** retains power against genuine cluster
+differences.
+
+## Practical notes
+
+- Use `condition_on = "final"` (the default) for inference. The
+  `"trajectory"` option is **experimental**: its feasible region is much
+  tighter and the local sampler under-mixes there.
+- The MCMC settings here (`burn = 200`, `B = 400`, `thin = 2`) are tuned for a
+  fast vignette. For real analyses, increase them (e.g. `burn = 1000`,
+  `B = 2000`, `thin = 5`) and inspect `summary()` for the acceptance rate and
+  number of unique draws.
+- See `?selective_hotelling_test` for the available samplers (`"fast"`,
+  `"har"`, `"cayley"`) and all arguments.
+
+## References
+
+- Chen, Y. T. and Witten, D. M. (2023). Selective inference for k-means
+  clustering. *Journal of Machine Learning Research*.
+- Gao, L. L., Bien, J. and Witten, D. (2024). Selective inference for
+  hierarchical clustering. *Journal of the American Statistical Association*.

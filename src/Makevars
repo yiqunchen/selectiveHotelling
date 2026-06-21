@@ -1,0 +1,8 @@
+# Disable fused multiply-add / FP contraction so that (diff*diff) rounds to a
+# double BEFORE accumulation, matching R's elementwise rounding in
+# rowSums((x - center)^2). Required for bit-for-bit agreement between the
+# compiled kmeans (kmeans_fixed_init_cpp) and the pure-R reference
+# (kmeans_with_fixed_init_R). The source also carries a clang-only
+# `#pragma STDC FP_CONTRACT OFF`; this flag covers gcc and any compiler where
+# the pragma is ignored.
+PKG_CPPFLAGS = -ffp-contract=off
