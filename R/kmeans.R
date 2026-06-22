@@ -139,21 +139,6 @@ kmeans_fun <- function(x, k = 3) {
   kmeans_with_trajectory(x, k = k)
 }
 
-#' Trajectory-recording k-means returning only the final labels
-#'
-#' Backward-compatible wrapper around [kmeans_with_trajectory()] that returns
-#' just the final cluster-assignment vector.
-#'
-#' @param x A numeric data matrix with observations in rows.
-#' @param k Number of clusters.
-#'
-#' @return An integer vector of final cluster labels.
-#'
-#' @keywords internal
-kmeans_fun_simple <- function(x, k = 3) {
-  kmeans_with_trajectory(x, k = k)$cluster
-}
-
 #' K-means from a fixed initialization
 #'
 #' Runs Lloyd's k-means from an explicitly supplied set of initial center

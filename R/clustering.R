@@ -73,8 +73,9 @@ hclust_fun <- function(x, k = 3, method = "average", square = TRUE) {
 # make_hclust_cl_fun(k, method, square): internal factory returning a BARE
 # closure `function(Xmat) -> integer labels`, suitable for passing directly to
 # selective_hotelling_bc() as its `cl_fun`. Deterministic; captures k/method/
-# square by value. Matches the convention of sim/bc_general.R::make_hclust_cl_fun
-# (square = TRUE -> clusterpval squared-distance convention).
+# square by value. Same algorithm as sim/bc_general.R::make_hclust_cl_fun; here
+# `square` defaults to TRUE (the clusterpval squared-distance convention used by
+# the hierarchical sweep), whereas the sim factory defaults to FALSE.
 # -----------------------------------------------------------------------------
 #' @keywords internal
 #' @noRd
