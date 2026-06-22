@@ -4,16 +4,33 @@
 \name{selectiveHotelling-package}
 \alias{selectiveHotelling}
 \alias{selectiveHotelling-package}
-\title{selectiveHotelling: Selective Hotelling T-squared Testing After k-Means
+\title{selectiveHotelling: Selective Hotelling T-squared Testing After
 Clustering with Unknown Covariance}
 \description{
 Implements valid selective inference for a Hotelling \eqn{T^2} test comparing
-the means of two clusters that were \emph{discovered} by k-means clustering, while
-treating the covariance matrix \eqn{\Sigma} as unknown. The package computes
-Monte Carlo p-values that account for the data-driven selection event by
-sampling uniformly (within the selection region) from the polar factor
-\eqn{Q} on the Stiefel manifold.
+the means of two clusters that were \emph{discovered} by a data-driven clustering
+algorithm, while treating the covariance matrix \eqn{\Sigma} as unknown. The
+package computes Monte Carlo p-values that account for the data-driven
+selection event by sampling the polar factor \eqn{Q} on the Stiefel manifold
+within the selection region.
 }
+\section{Clustering algorithms}{
+
+Two entry points cover different clustering routines:
+\itemize{
+\item \code{\link[=selective_hotelling_test]{selective_hotelling_test()}} tests a pair of \strong{k-means} clusters via the
+Cayley/hit-and-run MCMC samplers (and can also dispatch to the exact path
+test below for \strong{hierarchical} clustering, \code{clustering = "hclust"}).
+\item \code{\link[=selective_hotelling_bc]{selective_hotelling_bc()}} is \strong{algorithm-agnostic}: it takes any
+black-box clustering function \code{cl_fun} and returns an \emph{exact} selective
+p-value using the Besag & Clifford (1991) serial Monte Carlo (random-index)
+construction on a reversible Stiefel kernel. Validity holds for \emph{any}
+reversible kernel, \emph{any} path length, and \emph{any} clustering routine; mixing
+only buys power. \code{\link[=hclust_fun]{hclust_fun()}} is the bundled hierarchical-clustering
+\code{cl_fun}.
+}
+}
+
 \section{Conditioning strategies}{
 
 The user-facing entry point \code{\link[=selective_hotelling_test]{selective_hotelling_test()}} supports two
@@ -33,9 +50,12 @@ random walk under-mixes there, so it is not currently recommended.
 
 \itemize{
 \item \code{\link[=selective_hotelling_test]{selective_hotelling_test()}} - user-facing wrapper returning a
-\code{"selectiveHotelling"} S3 object.
+\code{"selectiveHotelling"} S3 object (k-means MCMC or hierarchical BC path).
+\item \code{\link[=selective_hotelling_bc]{selective_hotelling_bc()}} - algorithm-agnostic exact Besag-Clifford
+selective test for an arbitrary clustering \code{cl_fun}.
 \item \code{\link[=selective_hotelling_mcmc_fast]{selective_hotelling_mcmc_fast()}} - fast Cayley random-walk sampler.
 \item \code{\link[=kmeans_fun]{kmeans_fun()}} / \code{\link[=kmeans_with_fixed_init]{kmeans_with_fixed_init()}} - k-means with full trajectory.
+\item \code{\link[=hclust_fun]{hclust_fun()}} - hierarchical clustering \code{cl_fun} (squared-distance default).
 \item \code{\link[=generate_exchangeable_null_data]{generate_exchangeable_null_data()}} - simulate exchangeable null data.
 \item \code{\link[=hotelling_T2]{hotelling_T2()}} - classical two-sample Hotelling \eqn{T^2} statistic.
 }
@@ -44,9 +64,17 @@ random walk under-mixes there, so it is not currently recommended.
 \references{
 Chen, Y. T. and Witten, D. M. (2023). Selective inference for k-means
 clustering. \emph{Journal of Machine Learning Research}.
+
+Besag, J. and Clifford, P. (1991). Sequential Monte Carlo p-values.
+\emph{Biometrika}, 78(2), 301-304.
 }
 \author{
 \strong{Maintainer}: Yiqun Chen \email{yiqun.t.chen@gmail.com}
+
+Authors:
+\itemize{
+  \item Yiqun Chen \email{yiqun.t.chen@gmail.com}
+}
 
 }
 \keyword{internal}

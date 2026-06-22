@@ -1,15 +1,20 @@
 Package: selectiveHotelling
-Title: Selective Hotelling T-squared Testing After k-Means Clustering with
+Title: Selective Hotelling T-squared Testing After Clustering with
     Unknown Covariance
 Version: 0.1.0
 Authors@R:
     person("Yiqun", "Chen", , "yiqun.t.chen@gmail.com", role = c("aut", "cre"))
 Description: Valid selective inference for a Hotelling T-squared test comparing
-    the means of two clusters discovered by k-means clustering, treating the
-    covariance matrix as unknown. Monte Carlo p-values are computed by sampling
-    the polar factor uniformly within the data-driven selection region on the
-    Stiefel manifold, extending the selective inference framework of Chen and
-    Witten (2023) to the unknown-covariance setting.
+    the means of two clusters discovered by a data-driven clustering algorithm,
+    treating the covariance matrix as unknown. For k-means clustering, Monte
+    Carlo p-values are computed by sampling the polar factor uniformly within
+    the data-driven selection region on the Stiefel manifold, extending the
+    selective inference framework of Chen and Witten (2023) to the
+    unknown-covariance setting. An algorithm-agnostic exact test based on the
+    Besag and Clifford (1991) serial Monte Carlo construction supports
+    arbitrary clustering routines, including hierarchical clustering, by
+    sampling along a reversible Markov chain on the Stiefel manifold restricted
+    to the selection event.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Imports:

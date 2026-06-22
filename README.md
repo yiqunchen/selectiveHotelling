@@ -81,6 +81,35 @@ default); conditioning on the full k-means **trajectory**
 inference, because that region is much tighter and the local random walk
 under-mixes.
 
+## Beyond k-means: hierarchical and arbitrary clustering
+
+The same Stiefel-manifold argument works for *any* clustering routine, not just
+k-means. `selective_hotelling_bc()` implements an **exact** selective test based
+on the Besag & Clifford (1991) serial Monte Carlo (random-index) construction:
+it runs a reversible Markov chain on the Stiefel manifold restricted to the
+selection event, and the rank of the observed statistic among the path is
+*exactly* uniform under the null. Validity holds for **any** reversible kernel,
+**any** path length `M`, and **any** clustering function — only the *power*
+depends on these choices.
+
+```r
+# Hierarchical clustering, via the one-line wrapper:
+res_h <- selective_hotelling_test(X, k1 = 1, k2 = 2, K = 3,
+                                  clustering = "hclust",   # average linkage, squared distances
+                                  M = 200)
+res_h$pval
+
+# ...or call the algorithm-agnostic engine directly with ANY cl_fun:
+cl_fun <- function(x) hclust_fun(x, k = 3, method = "average")$cluster
+res_g  <- selective_hotelling_bc(X, cl_fun, k1 = 1, k2 = 2, M = 200)
+res_g$pval
+```
+
+`hclust_fun()` is the bundled hierarchical-clustering `cl_fun` (using squared
+Euclidean distances by default, matching the `clusterpval` convention). Any
+deterministic, data-only clustering routine can be passed to
+`selective_hotelling_bc()` in the same way.
+
 ## Background and references
 
 This package extends selective inference for clustering to the
@@ -90,6 +119,8 @@ unknown-covariance setting. For background see:
   clustering.* Journal of Machine Learning Research.
 - Gao, L. L., Bien, J. and Witten, D. (2024). *Selective inference for
   hierarchical clustering.* Journal of the American Statistical Association.
+- Besag, J. and Clifford, P. (1991). *Sequential Monte Carlo p-values.*
+  Biometrika, 78(2), 301-304.
 
 ## License
 

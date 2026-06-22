@@ -2,19 +2,24 @@
 % Please edit documentation in R/test.R
 \name{selective_hotelling_test}
 \alias{selective_hotelling_test}
-\title{Selective Hotelling T-squared test after k-means clustering}
+\title{Selective Hotelling T-squared test after clustering}
 \usage{
 selective_hotelling_test(
   X,
   k1,
   k2,
   K = 3,
+  clustering = c("kmeans", "hclust"),
   condition_on = "final",
   sampler = c("fast", "har", "cayley"),
   burn = 1000,
   B = 2000,
   thin = 5,
   eps = 0.05,
+  hclust_method = "average",
+  hclust_square = TRUE,
+  M = 300L,
+  L = 2L,
   ridge = 1e-08,
   show_progress = FALSE,
   verbose = FALSE
@@ -25,50 +30,88 @@ selective_hotelling_test(
 
 \item{k1, k2}{The two cluster labels (in \code{1:K}) to compare.}
 
-\item{K}{Number of clusters for the k-means clustering.}
+\item{K}{Number of clusters.}
 
-\item{condition_on}{Selection-event definition. \code{"final"} (default,
-\strong{validated/supported}) conditions only on the final cluster assignments
-of the selected pair. \code{"trajectory"} (\strong{EXPERIMENTAL}) conditions on all
-intermediate k-means assignments; its feasible region is much tighter and
-the local Cayley walk under-mixes there, so it is not recommended for
-inference.}
+\item{clustering}{Clustering route: \code{"kmeans"} (default, MCMC sampler) or
+\code{"hclust"} (hierarchical clustering through the exact Besag-Clifford
+engine).}
 
-\item{sampler}{MCMC sampler to use: \code{"fast"} (default, fast Cayley
-random walk with exact fixed-init feasibility checks), \code{"har"} (two-row
-geodesic hit-and-run / slice), or \code{"cayley"} (re-clustering Cayley random
-walk).}
+\item{condition_on}{Selection-event definition for \code{clustering = "kmeans"}.
+\code{"final"} (default, \strong{validated/supported}) conditions only on the final
+cluster assignments of the selected pair. \code{"trajectory"}
+(\strong{EXPERIMENTAL}) conditions on all intermediate k-means assignments; its
+feasible region is much tighter and the local Cayley walk under-mixes
+there, so it is not recommended for inference. Ignored for
+\code{clustering = "hclust"}.}
 
-\item{burn}{Burn-in iterations.}
+\item{sampler}{MCMC sampler to use when \code{clustering = "kmeans"}: \code{"fast"}
+(default, fast Cayley random walk with exact fixed-init feasibility
+checks), \code{"har"} (two-row geodesic hit-and-run / slice), or \code{"cayley"}
+(re-clustering Cayley random walk). Ignored for \code{clustering = "hclust"}.}
 
-\item{B}{Number of post-burn-in draws to keep.}
+\item{burn}{Burn-in iterations (k-means/MCMC route only; ignored for
+\code{clustering = "hclust"}).}
 
-\item{thin}{Thinning factor.}
+\item{B}{Number of post-burn-in draws to keep (k-means/MCMC route only;
+ignored for \code{clustering = "hclust"}).}
 
-\item{eps}{Initial Cayley step size (used by \code{"fast"}/\code{"cayley"}; ignored by
-\code{"har"}, which uses geodesic moves).}
+\item{thin}{Thinning factor (k-means/MCMC route only; ignored for
+\code{clustering = "hclust"}).}
+
+\item{eps}{Initial Cayley step size (k-means/MCMC route only: used by
+\code{"fast"}/\code{"cayley"}, ignored by \code{"har"}; ignored entirely for
+\code{clustering = "hclust"}, which auto-calibrates its own step).}
+
+\item{hclust_method}{Agglomeration method for \code{clustering = "hclust"}, passed
+to \code{\link[=hclust_fun]{hclust_fun()}} / \code{\link[stats:hclust]{stats::hclust()}} (e.g. \code{"average"}, \code{"single"},
+\code{"complete"}, \code{"ward.D2"}). Ignored for \code{clustering = "kmeans"}.}
+
+\item{hclust_square}{If \code{TRUE} (default) the hierarchical clustering tree is
+built on squared Euclidean distances (the \code{clusterpval} convention); see
+\code{\link[=hclust_fun]{hclust_fun()}}. Ignored for \code{clustering = "kmeans"}.}
+
+\item{M}{Besag-Clifford path length for \code{clustering = "hclust"} (the path
+carries \code{M + 1} marks). Ignored for \code{clustering = "kmeans"}.}
+
+\item{L}{Number of Besag-Clifford kernel steps per path edge for
+\code{clustering = "hclust"}. Ignored for \code{clustering = "kmeans"}.}
 
 \item{ridge}{Ridge added to the pooled covariance in \code{\link[=hotelling_T2]{hotelling_T2()}}.}
 
 \item{show_progress}{Whether to display an MCMC progress bar (requires the
-\code{progress} package).}
+\code{progress} package; k-means/MCMC route only).}
 
 \item{verbose}{Whether to print sampler progress messages.}
 }
 \value{
 An S3 object of class \code{"selectiveHotelling"}: a list with elements
 \code{pval} (selective p-value), \code{se} (Monte Carlo standard error), \code{T_obs}
-(observed \eqn{T^2}), \code{draws} (sampled \eqn{T^2} values), \code{acc} (acceptance
-rate, \code{NA} for \code{"har"}), \code{n_unique_draws}, \code{k1}, \code{k2}, \code{K}, \code{condition_on},
-and \code{sampler}.
+(observed \eqn{T^2}), \code{draws} (sampled \eqn{T^2} or path statistic values),
+\code{acc} (acceptance / move rate, \code{NA} for \code{"har"}), \code{n_unique_draws}, \code{k1},
+\code{k2}, \code{K}, \code{condition_on}, and \code{sampler} (\code{"fast"}/\code{"har"}/\code{"cayley"} for
+k-means, or \code{"besag-clifford"} for \code{clustering = "hclust"}).
 }
 \description{
-Runs the full selective inference pipeline: cluster \code{X} with k-means
-(\code{K} clusters, via \code{\link[=kmeans_fun]{kmeans_fun()}}), then test the equality of the means of
-the discovered clusters \code{k1} and \code{k2} with a Hotelling \eqn{T^2} statistic
-whose null distribution is obtained by MCMC sampling of the polar factor \code{Q}
-\emph{within the selection region}, treating the covariance \eqn{\Sigma} as
-unknown. The returned p-value controls the selective Type I error.
+Runs the full selective inference pipeline: cluster \code{X} (with k-means or
+hierarchical clustering, \code{K} clusters), then test the equality of the means
+of the discovered clusters \code{k1} and \code{k2} with a Hotelling \eqn{T^2}
+statistic, treating the covariance \eqn{\Sigma} as unknown. The returned
+p-value controls the selective Type I error.
+}
+\details{
+Two clustering routes are supported via \code{clustering}:
+\itemize{
+\item \code{"kmeans"} (default): clusters with k-means (via \code{\link[=kmeans_fun]{kmeans_fun()}}) and
+obtains the null distribution of \eqn{T^2} by MCMC sampling of the polar
+factor \code{Q} \emph{within the k-means selection region}. The MCMC controls
+(\code{sampler}, \code{condition_on}, \code{burn}, \code{B}, \code{thin}, \code{eps}) apply here.
+\item \code{"hclust"}: clusters with deterministic agglomerative hierarchical
+clustering (via \code{\link[=hclust_fun]{hclust_fun()}}) and routes through the preferred,
+\strong{exact} algorithm-agnostic Besag-Clifford engine
+(\code{\link[=selective_hotelling_bc]{selective_hotelling_bc()}}). The Besag-Clifford controls (\code{M}, \code{L})
+apply here; the MCMC-only controls (\code{sampler}, \code{condition_on}, \code{burn},
+\code{B}, \code{thin}, \code{eps}) are \strong{ignored}.
+}
 }
 \examples{
 set.seed(1)
@@ -80,7 +123,21 @@ res <- selective_hotelling_test(
 res$pval
 print(res)
 
+# Hierarchical clustering routed through the exact Besag-Clifford engine.
+# Three separated blobs so hclust recovers three sizeable clusters.
+set.seed(2)
+Xb <- rbind(
+  matrix(rnorm(20), 10, 2),
+  matrix(rnorm(20) + 6, 10, 2),
+  matrix(rnorm(20) - 6, 10, 2)
+)
+res_h <- selective_hotelling_test(
+  Xb, 1, 2, K = 3, clustering = "hclust", M = 80
+)
+res_h$pval
+
 }
 \seealso{
-\code{\link[=selective_hotelling_mcmc_fast]{selective_hotelling_mcmc_fast()}}, \code{\link[=kmeans_fun]{kmeans_fun()}}
+\code{\link[=selective_hotelling_mcmc_fast]{selective_hotelling_mcmc_fast()}}, \code{\link[=selective_hotelling_bc]{selective_hotelling_bc()}},
+\code{\link[=kmeans_fun]{kmeans_fun()}}, \code{\link[=hclust_fun]{hclust_fun()}}
 }
