@@ -99,7 +99,7 @@
 selective_hotelling_test <- function(X, k1, k2, K = 3,
                                      clustering = c("kmeans", "hclust"),
                                      condition_on = "final",
-                                     sampler = c("fast", "har", "cayley"),
+                                     sampler = c("analytic", "fast", "cayley", "har"),
                                      burn = 1000, B = 2000, thin = 5,
                                      eps = 0.05,
                                      hclust_method = "average",
@@ -128,6 +128,21 @@ selective_hotelling_test <- function(X, k1, k2, K = 3,
   # -------------------------------------------------------------------------
   sampler <- match.arg(sampler)
   condition_on <- match.arg(condition_on, c("final", "trajectory"))
+
+  # ANALYTIC-FIRST (default): the exact closed-form analytic-arc hit-and-run test
+  # on the fixed-init Lloyd TRAJECTORY (selective_hotelling_har). It is
+  # rejection-free, needs no burn-in/step-size tuning, and returns its own
+  # complete trajectory-conditioned "selectiveHotelling" object (full T^2). The
+  # MCMC samplers below ("fast"/"cayley"/"har") are DEMOTED black-box fallbacks
+  # kept for comparison; note "har" here is the LEGACY black-box bisection
+  # hit-and-run, NOT the exact analytic HAR above. `condition_on` applies only to
+  # those MCMC fallbacks (the analytic route always conditions on the trajectory).
+  if (sampler == "analytic") {
+    return(selective_hotelling_har(
+      X, k1, k2, K = K, M = M, L = L,
+      randomized = TRUE, ridge = ridge, verbose = verbose
+    ))
+  }
 
   cl_fun <- function(x) kmeans_fun(x, k = K)
 

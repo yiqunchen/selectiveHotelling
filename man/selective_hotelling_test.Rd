@@ -11,7 +11,7 @@ selective_hotelling_test(
   K = 3,
   clustering = c("kmeans", "hclust"),
   condition_on = "final",
-  sampler = c("fast", "har", "cayley"),
+  sampler = c("analytic", "fast", "cayley", "har"),
   burn = 1000,
   B = 2000,
   thin = 5,
