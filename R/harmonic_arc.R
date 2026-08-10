@@ -178,10 +178,14 @@
 # condition on the observed trajectory) and does not depend on theta.
 #' @keywords internal
 #' @noRd
-.hclust_merge_structure <- function(X, K, method = "average", square = TRUE) {
+.hclust_merge_structure <- function(X, K, method = "average", square = TRUE,
+                                    hc = NULL) {
   n <- nrow(X)
-  d <- stats::dist(X); if (isTRUE(square)) d <- d^2
-  hc <- stats::hclust(d, method = method)
+  # `hc` lets the caller pass the hclust it already built for the cell labelling.
+  if (is.null(hc)) {
+    d <- stats::dist(X); if (isTRUE(square)) d <- d^2
+    hc <- stats::hclust(d, method = method)
+  }
   mg <- hc$merge
   node <- vector("list", n - 1L)             # index set formed at each merge
   left_of <- right_of <- vector("list", n - 1L)
@@ -192,26 +196,31 @@
     left_of[[s]] <- Gi; right_of[[s]] <- Hi
     node[[s]] <- c(Gi, Hi)
   }
-  # active clusters just before each step; only the first (n-K) merges matter
+  # active clusters just before each step; only the first (n-K) merges matter.
+  # Clusters are identified by min(members): they are disjoint, so it is unique,
+  # and it avoids a string key built O(n^2) times per step.
   active <- as.list(seq_len(n))              # start: singletons {1},...,{n}
-  key <- function(v) paste0(sort(v), collapse = ",")
-  steps <- vector("list", n - K)
+  akey   <- vapply(active, min, integer(1))  # parallel vector of integer ids
+  steps  <- vector("list", n - K)
   for (s in seq_len(n - K)) {
     Gi <- left_of[[s]]; Hi <- right_of[[s]]
-    kG <- key(Gi); kH <- key(Hi)
-    others <- active[!(vapply(active, key, "") %in% c(kG, kH))]
-    comp <- list()
-    # merged pair vs every other active pair (all pairs among active clusters)
-    all_cl <- active
-    na <- length(all_cl)
-    for (x in seq_len(na - 1L)) for (y in (x + 1L):na) {
-      kx <- key(all_cl[[x]]); ky <- key(all_cl[[y]])
-      if (kx == kG && ky == kH) next
-      if (kx == kH && ky == kG) next
-      comp[[length(comp) + 1L]] <- list(G = all_cl[[x]], H = all_cl[[y]])
+    kG <- min(Gi); kH <- min(Hi)
+    keep_other <- !(akey %in% c(kG, kH))
+    others     <- active[keep_other]
+    na    <- length(active)
+    npair <- if (na >= 2L) na * (na - 1L) / 2L - 1L else 0L   # all pairs minus (G,H)
+    comp  <- vector("list", max(npair, 0L))
+    nc <- 0L
+    if (na >= 2L) for (x in seq_len(na - 1L)) for (y in (x + 1L):na) {
+      kx <- akey[x]; ky <- akey[y]
+      if ((kx == kG && ky == kH) || (kx == kH && ky == kG)) next
+      nc <- nc + 1L
+      comp[[nc]] <- list(G = active[[x]], H = active[[y]])
     }
+    length(comp) <- nc
     steps[[s]] <- list(mG = Gi, mH = Hi, comp = comp)
     active <- c(others, list(c(Gi, Hi)))     # perform the merge
+    akey   <- c(akey[keep_other], min(kG, kH))
   }
   list(steps = steps, n = n, K = K)
 }
@@ -347,17 +356,25 @@
     guard <- guard + 1L
     probe <- min(th + eps, hi - 1e-12)
     Xp <- X_of_Q(Qtheta(probe))
-    cl_cell <- {
-      d <- stats::dist(Xp); if (isTRUE(square)) d <- d^2
-      as.integer(stats::cutree(stats::hclust(d, method = method), k = K))
-    }
-    ms_cell <- .hclust_merge_structure(Xp, K, method, square)
+    # one dist+hclust per cell, shared with .hclust_merge_structure below
+    d_cell <- stats::dist(Xp); if (isTRUE(square)) d_cell <- d_cell^2
+    hc_cell <- stats::hclust(d_cell, method = method)
+    cl_cell <- as.integer(stats::cutree(hc_cell, k = K))
+    ms_cell <- .hclust_merge_structure(Xp, K, method, square, hc = hc_cell)
     co <- .hclust_traj_coeffs(P, U, W, ms_cell, method = method)
     nb <- hi
-    if (length(co$A)) for (jj in seq_along(co$A)) {
-      rts <- .harmonic_roots(co$A[jj], co$B[jj], co$C[jj], co$D[jj], co$E[jj])
-      rts <- rts[rts > th + 1e-9 & rts <= hi + 1e-9]
-      if (length(rts)) nb <- min(nb, min(rts))
+    if (length(co$A)) {
+      # |g_j| <= M + |E| with M = sqrt(A^2+B^2) + sqrt(C^2+D^2), so |E| > M means
+      # g_j never crosses zero and contributes no breakpoint. Output-preserving:
+      # nb is a min over roots and pruned constraints have none.
+      Aj <- co$A; Bj <- co$B; Cj <- co$C; Dj <- co$D; Ej <- co$E
+      Mj <- sqrt(Aj * Aj + Bj * Bj) + sqrt(Cj * Cj + Dj * Dj)
+      cand <- which(abs(Ej) <= Mj + 1e-12)
+      for (jj in cand) {
+        rts <- .harmonic_roots(Aj[jj], Bj[jj], Cj[jj], Dj[jj], Ej[jj])
+        rts <- rts[rts > th + 1e-9 & rts <= hi + 1e-9]
+        if (length(rts)) nb <- min(nb, min(rts))
+      }
     }
     if (nb <= th + 1e-12) nb <- min(th + 1e-4, hi)   # numeric floor (never stall)
     cells_lo <- c(cells_lo, th); cells_hi <- c(cells_hi, nb)
