@@ -59,20 +59,79 @@
 #' @noRd
 .truncF_pvalue <- function(intervals, theta_obs, p, r) {
   alpha <- p / 2; beta <- (r - 1 - p) / 2
-  bmass <- function(lo, hi) {
-    if (hi <= lo) return(0)
-    stats::pbeta(cos(lo)^2, alpha, beta) - stats::pbeta(cos(hi)^2, alpha, beta)
+
+  # LOG-SPACE Beta mass. The natural form,
+  #     pbeta(cos(lo)^2) - pbeta(cos(hi)^2),
+  # is a difference of two nearly-equal CDF values. The feasible theta-arc
+  # shrinks as n grows (the Lloyd trajectory contributes ~n(K-1) constraints per
+  # iteration), so both terms converge, the difference underflows, and the
+  # p-value degenerates to 0/0 = NA. Measured on null iso p=10 data:
+  #     n=50   fine
+  #     n=100  total feasible mass already 1e-13 .. 1e-15  (5/6 replicates survive)
+  #     n=200  total feasible mass EXACTLY 0                (0/6 survive)
+  # which wiped out all six n=200 cells of the unified sweep.
+  #
+  # log(e^la - e^lb) = la + log1p(-exp(lb - la)) is algebraically identical and
+  # stays accurate at log-masses far below where the raw difference underflows,
+  # because pbeta(log.p = TRUE) is computed in log space throughout. Only the
+  # RATIO is needed, so the common scale cancels exactly.
+  # TAIL CHOICE MATTERS. theta near 0.5 rad puts cos^2(theta) ~ 0.72, while a
+  # Beta(p/2, (r-1-p)/2) with large r has mean ~0.08 -- so BOTH endpoint CDFs sit
+  # at essentially 1, and a lower-tail log difference collapses (log(1)-log(1)).
+  # Whichever tail holds the SMALL probability is the one that carries the
+  # resolution, so pick it by where the interval sits. For an arc so narrow that
+  # even the correct tail cancels, fall back to density x width, which is exact
+  # to first order and cannot cancel at all. Only the RATIO is used and both
+  # numerator and denominator go through this same routine, so any residual
+  # first-order error largely cancels.
+  lbmass <- function(lo, hi) {
+    if (hi <= lo) return(-Inf)
+    xl <- cos(hi)^2                      # smaller x  (theta larger)
+    xu <- cos(lo)^2                      # larger  x  (theta smaller)
+    if (!(xu > xl)) return(-Inf)
+    mid <- (xl + xu) / 2
+    upper <- stats::pbeta(mid, alpha, beta) > 0.5
+    if (upper) {                          # mass = Q(xl) - Q(xu),  Q = upper tail
+      la <- stats::pbeta(xl, alpha, beta, lower.tail = FALSE, log.p = TRUE)
+      lb <- stats::pbeta(xu, alpha, beta, lower.tail = FALSE, log.p = TRUE)
+    } else {                              # mass = F(xu) - F(xl)
+      la <- stats::pbeta(xu, alpha, beta, log.p = TRUE)
+      lb <- stats::pbeta(xl, alpha, beta, log.p = TRUE)
+    }
+    if (is.finite(la) && lb < la) {
+      out <- la + log1p(-exp(lb - la))
+      if (is.finite(out)) return(out)
+    }
+    # narrow-arc fallback: log( f(mid) * (xu - xl) )
+    stats::dbeta(mid, alpha, beta, log = TRUE) + log(xu - xl)
   }
-  denom <- 0; numer <- 0
+  logsumexp <- function(v) {
+    v <- v[is.finite(v)]
+    if (!length(v)) return(-Inf)
+    m <- max(v); m + log(sum(exp(v - m)))
+  }
+
+  ld <- numeric(0); ln <- numeric(0)
   if (!is.null(intervals) && nrow(intervals)) {
     for (k in seq_len(nrow(intervals))) {
       lo <- intervals[k, 1]; hi <- intervals[k, 2]
-      denom <- denom + bmass(lo, hi)
-      if (lo < theta_obs) numer <- numer + bmass(lo, min(hi, theta_obs))
+      ld <- c(ld, lbmass(lo, hi))
+      if (lo < theta_obs) ln <- c(ln, lbmass(lo, min(hi, theta_obs)))
     }
   }
-  list(pval = if (denom > 0) as.numeric(numer / denom) else NA_real_,
-       denom_mass = as.numeric(denom), numer_mass = as.numeric(numer),
+  lden <- logsumexp(ld); lnum <- logsumexp(ln)
+
+  # The numerator integrates a SUBSET of the denominator's arcs, so the ratio is
+  # in [0,1] mathematically; min(0, .) in log space enforces that against
+  # rounding, and the [0,1] clamp is a belt-and-braces guard on the exponential.
+  pval <- if (is.finite(lden)) exp(min(0, lnum - lden)) else NA_real_
+  if (is.finite(pval)) pval <- max(0, min(1, pval))
+  # NOTE: a genuinely uncomputable case stays NA rather than being coerced to 0
+  # or 1. Coercing would fabricate a p-value and silently bias Type-I and power;
+  # an NA is counted and reported by the aggregators instead.
+
+  list(pval = pval, log_denom = lden, log_numer = lnum,
+       denom_mass = exp(lden), numer_mass = exp(lnum),
        alpha = alpha, beta = beta)
 }
 
