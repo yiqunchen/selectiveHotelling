@@ -21,6 +21,63 @@
 # ---- roots of a single harmonic on [0, 2pi) (verified twin: analytic_arc.R) ---
 #' @keywords internal
 #' @noRd
+# ---- batched harmonic roots ---------------------------------------------------
+# Roots of A cos2t + B sin2t + C cos t + D sin t + E = 0 on [0, 2pi) for MANY
+# constraints at once. Same algebra as .harmonic_roots (Weierstrass s = tan(t/2)
+# gives a quartic, then Newton polish), but the polish runs vectorised over all
+# candidates from all constraints instead of scalar loops with per-call closures.
+# Returns list(t, j) with j the constraint index of each accepted root.
+#' @keywords internal
+#' @noRd
+.harmonic_roots_batch <- function(A, B, C, D, E, tol = 1e-9) {
+  nC <- length(A)
+  if (!nC) return(list(t = numeric(0), j = integer(0)))
+  amp <- abs(A) + abs(B) + abs(C) + abs(D) + abs(E)
+
+  p0 <- A + C + E; p1 <- 4 * B + 2 * D; p2 <- -6 * A + 2 * E
+  p3 <- -4 * B + 2 * D; p4 <- A - C + E
+  cand_t <- numeric(0); cand_j <- integer(0)
+  for (j in seq_len(nC)) {
+    if (amp[j] == 0) next
+    coef <- c(p0[j], p1[j], p2[j], p3[j], p4[j])
+    nz <- suppressWarnings(max(which(abs(coef) > tol * (sum(abs(coef)) + 1))))
+    if (!is.finite(nz)) nz <- 1L
+    if (nz < 2L) next
+    rr <- tryCatch(polyroot(coef[seq_len(nz)]), error = function(e) complex(0))
+    if (!length(rr)) next
+    s <- Re(rr); s <- s[is.finite(s)]
+    if (!length(s)) next
+    cand_t <- c(cand_t, (2 * atan(s)) %% (2 * pi))
+    cand_j <- c(cand_j, rep.int(j, length(s)))
+  }
+
+  if (length(cand_t)) {                       # vectorised Newton over ALL candidates
+    Aj <- A[cand_j]; Bj <- B[cand_j]; Cj <- C[cand_j]; Dj <- D[cand_j]; Ej <- E[cand_j]
+    t <- cand_t
+    for (it in seq_len(8L)) {
+      c2 <- cos(2 * t); s2 <- sin(2 * t); ct <- cos(t); st <- sin(t)
+      gv  <- Aj * c2 + Bj * s2 + Cj * ct + Dj * st + Ej
+      gpv <- -2 * Aj * s2 + 2 * Bj * c2 - Cj * st + Dj * ct
+      ok <- abs(gpv) >= 1e-14
+      if (!any(ok)) break
+      step <- ifelse(ok, gv / gpv, 0)
+      t <- t - step
+      if (max(abs(step)) < 1e-13) break
+    }
+    t <- t %% (2 * pi)
+    gv <- A[cand_j] * cos(2 * t) + B[cand_j] * sin(2 * t) +
+          C[cand_j] * cos(t) + D[cand_j] * sin(t) + E[cand_j]
+    keep <- abs(gv) <= 1e-7 * amp[cand_j] + 1e-12
+    cand_t <- t[keep]; cand_j <- cand_j[keep]
+  }
+
+  # t = pi is a root whenever g(pi) = A - C + E is (numerically) zero
+  gpi <- A - C + E
+  jp  <- which(amp > 0 & abs(gpi) <= 1e-7 * amp + 1e-12)
+  if (length(jp)) { cand_t <- c(cand_t, rep.int(pi, length(jp))); cand_j <- c(cand_j, jp) }
+  list(t = cand_t, j = cand_j)
+}
+
 .harmonic_roots <- function(A, B, C, D, E, tol = 1e-9) {
   amp <- abs(A) + abs(B) + abs(C) + abs(D) + abs(E)
   if (amp == 0) return(numeric(0))
@@ -351,7 +408,7 @@
     as.integer(stats::cutree(stats::hclust(d, method = method), k = K))
   }
   cells_lo <- numeric(0); cells_hi <- numeric(0); cells_pp <- logical(0)
-  th <- lo; guard <- 0L
+  th <- lo; guard <- 0L; n_floor <- 0L
   while (th < hi - 1e-12 && guard < max_cells) {
     guard <- guard + 1L
     probe <- min(th + eps, hi - 1e-12)
@@ -370,13 +427,15 @@
       Aj <- co$A; Bj <- co$B; Cj <- co$C; Dj <- co$D; Ej <- co$E
       Mj <- sqrt(Aj * Aj + Bj * Bj) + sqrt(Cj * Cj + Dj * Dj)
       cand <- which(abs(Ej) <= Mj + 1e-12)
-      for (jj in cand) {
-        rts <- .harmonic_roots(Aj[jj], Bj[jj], Cj[jj], Dj[jj], Ej[jj])
-        rts <- rts[rts > th + 1e-9 & rts <= hi + 1e-9]
+      if (length(cand)) {
+        rb  <- .harmonic_roots_batch(Aj[cand], Bj[cand], Cj[cand], Dj[cand], Ej[cand])
+        rts <- rb$t[rb$t > th + 1e-9 & rb$t <= hi + 1e-9]
         if (length(rts)) nb <- min(nb, min(rts))
       }
     }
-    if (nb <= th + 1e-12) nb <- min(th + 1e-4, hi)   # numeric floor (never stall)
+    if (nb <= th + 1e-12) {                # numeric floor (never stall)
+      nb <- min(th + 1e-4, hi); n_floor <- n_floor + 1L
+    }
     cells_lo <- c(cells_lo, th); cells_hi <- c(cells_hi, nb)
     cells_pp <- c(cells_pp, .bc_pair_preserved(cl_obs, cl_cell, k1, k2))
     th <- nb
@@ -393,5 +452,18 @@
     arcs <- rbind(arcs, c(lo_i, hi_i)); i <- i + 1L
   }
   colnames(arcs) <- c("t_lo", "t_hi")
+  # Hitting max_cells means the march stopped before reaching `hi`, so the arc set
+  # is INCOMPLETE and a p-value built from it has the wrong denominator. Warn and
+  # record rather than returning a silently truncated answer. n_floor counts the
+  # 1e-4 fallback steps, each a non-analytic boundary placement.
+  capped <- (guard >= max_cells) && (th < hi - 1e-12)
+  if (capped)
+    warning(sprintf(paste0("hclust arc march hit max_cells=%d at theta=%.6g of %.6g: ",
+                           "arc set is TRUNCATED, p-value not exact. Raise max_cells."),
+                    max_cells, th, hi), call. = FALSE)
+  attr(arcs, "n_cells") <- guard
+  attr(arcs, "capped")  <- capped
+  attr(arcs, "reached") <- th
+  attr(arcs, "n_floor") <- n_floor
   arcs
 }
