@@ -101,6 +101,20 @@ test_that("errors when the pair is too small relative to dimension (r-1 <= p)", 
 })
 
 test_that("small exactness sanity: exact hclust null p-values ~ uniform", {
+  # OPT-IN: this block is far too slow for a routine suite run. A single
+  # selective_truncated_F() call on the "hclust" exact route takes MINUTES even at
+  # n=30, p=3 -- the cost is the pair-preserved arc solver's event-driven cell
+  # traversal, not the (shared, fast) truncated-F p-value: the same p-value code
+  # runs 12 replicates of the k-means route at n=400, p=10 in seconds. At 120
+  # replicates this block alone runs for hours and pushes the whole suite past any
+  # sane time limit, so it is gated rather than silently making `test_dir` unusable.
+  #
+  #   SELHOT_SLOW_TESTS=1 Rscript -e 'testthat::test_file(...)'
+  #     (or sbatch slurm/run_tests_slow.sbatch)
+  #
+  # If the hclust arc solver is ever optimised, drop the gate.
+  skip_if(!identical(Sys.getenv("SELHOT_SLOW_TESTS"), "1"),
+          "slow: hclust exact-route uniformity check (set SELHOT_SLOW_TESTS=1)")
   set.seed(7)
   reps <- 120L
   clf <- hclust_cl_fun(3L)
