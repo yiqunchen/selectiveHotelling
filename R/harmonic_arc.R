@@ -120,8 +120,15 @@
                                     prune = TRUE, tol_mid = 1e-10) {
   A <- coeffs$A; B <- coeffs$B; C <- coeffs$C; D <- coeffs$D; E <- coeffs$E
   nC <- length(A)
-  if (prune && nC > 0L) {                       # drop constraints that never bind
+  if (prune && nC > 0L) {
+    # |g - E| <= M classifies most constraints without any root work:
+    #   E + M < 0  -> g < 0 everywhere, constraint is inactive, DROP it
+    #   E - M > 0  -> g > 0 everywhere, constraint can never hold, set is EMPTY
     M <- sqrt(A^2 + B^2) + sqrt(C^2 + D^2)
+    if (any((E - M) > 1e-9)) {
+      out <- matrix(numeric(0), ncol = 2); colnames(out) <- c("t_lo", "t_hi")
+      return(out)
+    }
     keep <- (E + M) >= -1e-9
     A <- A[keep]; B <- B[keep]; C <- C[keep]; D <- D[keep]; E <- E[keep]
     nC <- length(A)
@@ -481,6 +488,110 @@
     }
   }
   list(A = A, B = B, C = C, D = D, E = E)
+}
+
+# ---- ONE-SHOT arcs for a FIXED average-linkage merge trace --------------------
+# Conditions on the OBSERVED merge sequence up to the K-cluster cut, rather than on
+# the weaker "cutree-K preserves the tested pair". That is strictly more
+# conditioning -- R_T is one component of the union S = U_T R_T over traces whose
+# cut preserves the pair -- and it must be reported as such. What it buys is that
+# the event becomes a FIXED conjunction, so there is no cell march, no cell budget,
+# and hence no max_cells truncation and no fabricated p = 1.
+#
+# THE LIFETIME REDUCTION. The march re-compares every active cluster pair at every
+# merge step, which is sum_s C(n_a, 2) ~ n^3/6 constraints (1.3M at n=200). But a
+# pair that loses at several consecutive steps only needs its LAST losing step:
+# with q = n - K, W_s the pair that merges at step s, h_s(t) = d_t(W_s) its
+# time-varying height, and u(P) the last step at which P is active and loses,
+#
+#     trace T holds at t   <=>   d_P(t) > h_{u(P)}(t)  for every losing pair P.
+#
+# Necessity is immediate. Sufficiency: the endpoint constraints force the heights
+# to be nondecreasing. For consecutive steps s, s+1 -- if W_{s+1} already existed
+# at step s it lost there, so h_{s+1} = d_{W_{s+1}} > h_s; otherwise
+# W_{s+1} = {A_s u B_s, C} and average linkage gives h_{s+1} as the |A|,|B|-weighted
+# mean of d(A_s,C) and d(B_s,C), both of which die at step s and are therefore
+# endpoint-constrained above h_s, so their weighted mean is too. Then any P losing
+# at step s has u(P) >= s, so d_P(t) > h_{u(P)}(t) >= h_s(t) and W_s really is
+# globally closest at every step. Note the heights are NOT assumed monotone a
+# priori -- the constraints certify monotonicity exactly on the trace-valid region,
+# which is what makes this work on a path where every row moves differently.
+#
+# Each pair identity is born once and dies once, so there are at most (n-1)^2
+# constraints (39,601 at n=200, ~34x fewer than the stepwise count) and they are
+# built in O(n^2) after the O(n^2 p) point-pair precomputation. d_P and h_u are
+# both harmonics, so each constraint is a harmonic and stays quartic-solvable.
+#' @keywords internal
+#' @noRd
+.hclust_trace_constraints <- function(pairH, hc_obs, K) {
+  n  <- nrow(pairH$A)
+  q  <- n - K
+  MA <- pairH$A; MB <- pairH$B; MC <- pairH$C; MD <- pairH$D; ME <- pairH$E
+  sz   <- rep(1, n)
+  born <- matrix(1L, n, n)          # step at which each pair identity became active
+  cA <- cB <- cC <- cD <- cE <- vector("list", 2L * q + 2L)
+  np <- 0L
+  # constraint is d_P(t) > h_u(t), i.e. g = h_u - d_P <= 0
+  push <- function(h, dA, dB, dC, dD, dE) {
+    if (!length(dA)) return(invisible(NULL))
+    np <<- np + 1L
+    cA[[np]] <<- h[1] - dA; cB[[np]] <<- h[2] - dB; cC[[np]] <<- h[3] - dC
+    cD[[np]] <<- h[4] - dD; cE[[np]] <<- h[5] - dE
+  }
+  mg <- hc_obs$merge
+  node <- vector("list", n - 1L); lf <- rt <- vector("list", n - 1L)
+  for (s in seq_len(n - 1L)) {
+    a <- mg[s, 1]; b <- mg[s, 2]
+    Gi <- if (a < 0) -a else node[[a]]
+    Hi <- if (b < 0) -b else node[[b]]
+    lf[[s]] <- Gi; rt[[s]] <- Hi; node[[s]] <- c(Gi, Hi)
+  }
+  akey <- seq_len(n); prevh <- NULL
+  for (s in seq_len(q)) {
+    Gi <- lf[[s]]; Hi <- rt[[s]]
+    ix <- match(min(Gi), akey); iy <- match(min(Hi), akey)
+    na <- length(akey)
+    h  <- c(MA[ix, iy], MB[ix, iy], MC[ix, iy], MD[ix, iy], ME[ix, iy])
+    oth <- seq_len(na)[-c(ix, iy)]
+    # every {ix,C} and {iy,C} is active at step s, loses, and dies here: u = s
+    for (w in c(ix, iy))
+      push(h, MA[w, oth], MB[w, oth], MC[w, oth], MD[w, oth], ME[w, oth])
+    # the winning pair itself last lost at s-1, if it was already active then
+    if (s >= 2L && !is.null(prevh) && born[ix, iy] <= s - 1L)
+      push(prevh, h[1], h[2], h[3], h[4], h[5])
+    prevh <- h
+    wG <- sz[ix]; wH <- sz[iy]; wn <- wG + wH
+    upd <- function(M) { nr <- ((wG * M[ix, ] + wH * M[iy, ]) / wn)[oth]
+                         rbind(cbind(M[oth, oth, drop = FALSE], nr), c(nr, 0)) }
+    MA <- upd(MA); MB <- upd(MB); MC <- upd(MC); MD <- upd(MD); ME <- upd(ME)
+    nb   <- rep(s + 1L, length(oth))
+    born <- rbind(cbind(born[oth, oth, drop = FALSE], nb), c(nb, s + 1L))
+    sz   <- c(sz[oth], wn)
+    akey <- c(akey[oth], min(min(Gi), min(Hi)))
+  }
+  # pairs still active after the cut never lose again: u = q
+  na <- length(akey)
+  if (na >= 2L && !is.null(prevh)) {
+    ut <- upper.tri(matrix(0, na, na))
+    push(prevh, MA[ut], MB[ut], MC[ut], MD[ut], ME[ut])
+  }
+  length(cA) <- np; length(cB) <- np; length(cC) <- np
+  length(cD) <- np; length(cE) <- np
+  list(A = unlist(cA), B = unlist(cB), C = unlist(cC),
+       D = unlist(cD), E = unlist(cE))
+}
+
+# One-shot trace-valid arcs: build the O(n^2) lifetime constraints, intersect.
+#' @keywords internal
+#' @noRd
+.hclust_trace_arcs <- function(P, U, W, K, hc_obs, lo = 0, hi = pi / 2,
+                               pairH = NULL) {
+  if (is.null(pairH)) pairH <- .hclust_pointpair_harmonics(P, U, W)
+  co <- .hclust_trace_constraints(pairH, hc_obs, K)
+  arcs <- .harmonic_feasible_arcs(co, lo, hi)
+  attr(arcs, "n_constraints") <- length(co$A)
+  attr(arcs, "capped") <- FALSE          # fixed conjunction: nothing to run out of
+  arcs
 }
 
 # ---- EXACT hclust PAIR-PRESERVED arc via event-driven cell traversal ----------

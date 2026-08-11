@@ -200,6 +200,16 @@
                              ridge, extra = list()) {
   geo <- red$geo; p <- red$p; r <- red$r
   pv <- .truncF_pvalue(arcs, geo$theta_obs, p, r)
+  # A TRUNCATED arc set has no valid p-value. The march walks upward from 0, so
+  # capping below theta_obs leaves every arc below it, numerator == denominator,
+  # and the ratio comes out exactly 1 -- a fabricated value, not a conservative
+  # one (0% of replicates at n=30, 4.5-15.6% at n=50, 100% at n=200). Return NA so
+  # the aggregators count it, as they already do for the uncomputable cases.
+  if (isTRUE(attr(arcs, "capped"))) {
+    pv$pval <- NA_real_
+    extra$capped <- TRUE
+    extra$note <- "arc march hit max_cells: arc set truncated, p-value not identifiable"
+  }
   T_obs    <- hotelling_T2(X, cl_obs, k1, k2, ridge)
   F_obs    <- ((r - p - 1) / p) * (cos(geo$theta_obs) / sin(geo$theta_obs))^2
   p_uncond <- 1 - stats::pf(F_obs, p, r - p - 1)
@@ -239,7 +249,8 @@
 #' @keywords internal
 #' @noRd
 .truncF_exact_hclust <- function(X, k1, k2, K, hclust_method, hclust_square,
-                                   cl_obs, ridge, verbose) {
+                                   cl_obs, ridge, verbose,
+                                   hclust_event = "pair") {
   if (is.null(cl_obs))
     cl_obs <- hclust_fun(X, k = K, method = hclust_method, square = hclust_square)$cluster
   cl_obs <- as.integer(cl_obs)
@@ -260,15 +271,25 @@
   }
   red <- .truncF_reduce(X, cl_obs, k1, k2); geo <- red$geo
   PUW <- .geodesic_PUW(red$X_of_Q, red$prep$X_fixed, geo$M_const, geo$M_cos, geo$M_sin)
-  # Hand the march the SAME Beta measure the p-value uses, so it can stop as soon
-  # as the unexplored tail provably cannot move the ratio (see the early-stop note
-  # in .hclust_pairpreserved_arcs). Without this the march caps mid-range and the
-  # p-value degenerates to exactly 1.
-  arcs <- .hclust_pairpreserved_arcs(PUW$P, PUW$U, PUW$W, red$X_of_Q, geo$Qtheta,
-                                     K, cl_obs, k1, k2, hclust_method, hclust_square,
-                                     theta_obs = geo$theta_obs,
-                                     lmass = .truncF_lbmass(red$p / 2,
-                                                            (red$r - 1 - red$p) / 2))
+  arcs <- if (identical(hclust_event, "trace")) {
+    # ONE-SHOT: condition on the observed merge sequence up to the K-cut. A fixed
+    # conjunction of O(n^2) lifetime constraints, so no march and no cell budget.
+    # STRONGER conditioning than "pair" -- report it as such.
+    hc_obs <- stats::hclust(if (isTRUE(hclust_square)) stats::dist(X)^2 else stats::dist(X),
+                            method = hclust_method)
+    .hclust_trace_arcs(PUW$P, PUW$U, PUW$W, K, hc_obs)
+  } else {
+    # Hand the march the SAME Beta measure the p-value uses, so it can stop as soon
+    # as the unexplored tail provably cannot move the ratio (see the early-stop note
+    # in .hclust_pairpreserved_arcs). NOTE: because the Beta mass concentrates near
+    # hi and the march arrives there last, this bracket rarely closes before the
+    # budget does -- it is not a substitute for fixing the march order.
+    .hclust_pairpreserved_arcs(PUW$P, PUW$U, PUW$W, red$X_of_Q, geo$Qtheta,
+                               K, cl_obs, k1, k2, hclust_method, hclust_square,
+                               theta_obs = geo$theta_obs,
+                               lmass = .truncF_lbmass(red$p / 2,
+                                                      (red$r - 1 - red$p) / 2))
+  }
   if (verbose) cat(sprintf("[truncated-Fhclust-exact] r=%d p=%d theta=%.4f #arcs=%d\n",
                            red$r, red$p, geo$theta_obs, nrow(arcs)))
   .truncF_result(red, arcs, X, cl_obs, k1, k2, "pair-preserved", ridge)
@@ -399,12 +420,14 @@ selective_truncated_F <- function(X, k1, k2,
                                 method = c("exact", "grid"),
                                 K = 3L, init_centers_idx = NULL,
                                 hclust_method = "average", hclust_square = TRUE,
+                                hclust_event = c("pair", "trace"),
                                 cl_fun = NULL, cl_obs = NULL,
                                 n_grid = 400L, boundary_tol = 1e-6,
                                 ridge = 1e-8, verbose = FALSE) {
   stopifnot(is.matrix(X))
-  clustering <- match.arg(clustering)
-  method     <- match.arg(method)
+  clustering   <- match.arg(clustering)
+  method       <- match.arg(method)
+  hclust_event <- match.arg(hclust_event)
 
   if (clustering == "custom") {
     if (is.null(cl_fun)) stop("clustering = 'custom' requires a `cl_fun`.")
@@ -422,6 +445,7 @@ selective_truncated_F <- function(X, k1, k2,
   # clustering == "hclust"
   if (method == "exact")
     return(.truncF_exact_hclust(X, k1, k2, K, hclust_method, hclust_square,
+                                hclust_event = hclust_event,
                                   cl_obs, ridge, verbose))
   cf <- if (!is.null(cl_fun)) cl_fun else
     function(x) hclust_fun(x, k = K, method = hclust_method, square = hclust_square)$cluster
