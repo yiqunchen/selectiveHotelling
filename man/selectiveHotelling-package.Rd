@@ -71,5 +71,10 @@ Besag, J. and Clifford, P. (1991). Sequential Monte Carlo p-values.
 \author{
 \strong{Maintainer}: Yiqun Chen \email{yiqun.t.chen@gmail.com}
 
+Authors:
+\itemize{
+  \item Yiqun Chen \email{yiqun.t.chen@gmail.com}
+}
+
 }
 \keyword{internal}

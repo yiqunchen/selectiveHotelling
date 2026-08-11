@@ -9,15 +9,26 @@
 # coordinate, its law is a 1-D truncated F, and the selective p-value is a
 # closed-form ratio of Beta masses -- exact, with NO sampling and NO mixing.
 #
-# THREE feasible-set engines (all share the truncated-Beta p-value):
+# FOUR feasible-set engines (all share the truncated-Beta p-value):
 #   * clustering = "kmeans", method = "exact"  -> EXACT closed-form arc on the
 #       fixed-init Lloyd TRAJECTORY (harmonic_arc.R::.kmeans_traj_coeffs), the
 #       same E_tau the k-means high-dim-Q test conditions on.
-#   * clustering = "hclust", method = "exact"  -> EXACT closed-form arc on the
-#       PAIR-PRESERVED (cutree-K partition) event via event-driven cell traversal
+#   * clustering = "hclust", method = "exact", hclust_event = "pair" (DEFAULT)
+#       -> EXACT closed-form arc on the PAIR-PRESERVED (cutree-K partition) event
+#       via event-driven cell traversal
 #       (harmonic_arc.R::.hclust_pairpreserved_arcs). This is the event
-#       selective_hotelling_bc and Gao et al. (clusterpval) condition on; the
-#       stronger agglomeration-trajectory event over-conditions and loses power.
+#       selective_hotelling_bc and Gao et al. (clusterpval) condition on. Its
+#       weakness is operational, not statistical: the march has a `max_cells`
+#       budget, and capping returns pval = NA (see .truncF_result).
+#   * clustering = "hclust", method = "exact", hclust_event = "trace"
+#       -> EXACT closed-form arc on the observed MERGE TRACE (same first n-K
+#       merges) as a one-shot conjunction of O(n^2) lifetime/endpoint constraints
+#       (harmonic_arc.R::.hclust_trace_arcs). No march, no cell budget, so it
+#       cannot cap. This is STRICTLY STRONGER conditioning than "pair" (the
+#       pair-preserved set is the union over all traces whose cut preserves the
+#       pair), so it must be reported as a different event. Its power relative to
+#       "pair" is UNMEASURED on the hierarchical side -- do not assume either way.
+#       DERIVED FOR AVERAGE LINKAGE ONLY (see .hclust_trace_constraints).
 #   * method = "grid" (or clustering = "custom")  -> algorithm-agnostic feasible
 #       set of an arbitrary cl_fun via dense grid + bisection (pair-preserved).
 # =============================================================================
@@ -269,6 +280,18 @@
     return(.truncF_grid(X, cf, k1, k2, cl_obs,
                           n_grid = 400L, boundary_tol = 1e-6, ridge, verbose))
   }
+  # SAFETY: the lifetime/endpoint theorem behind hclust_event = "trace" is derived
+  # for AVERAGE linkage only. Its sufficiency step needs h_{s+1} to be the
+  # size-weighted MEAN of two step-s endpoint-constrained distances; centroid
+  # subtracts |G||H|d(G,H)/(|G|+|H|)^2 from that mean, which can drop it below h_s
+  # and break the argument, and single/complete are min/max envelopes rather than a
+  # single harmonic at all. Empirically the constraint set is then simply WRONG:
+  # theta_obs is excluded from its own feasible set (complete 5/5 seeds, single 2/2,
+  # centroid 2/2 at n=26, p=3, K=3). Refuse rather than return a wrong arc set.
+  if (identical(hclust_event, "trace") && !identical(hclust_method, "average"))
+    stop(sprintf(paste0("hclust_event = 'trace' is derived for average linkage only ",
+                        "(got hclust_method = '%s'). Use hclust_event = 'pair'."),
+                 hclust_method))
   red <- .truncF_reduce(X, cl_obs, k1, k2); geo <- red$geo
   PUW <- .geodesic_PUW(red$X_of_Q, red$prep$X_fixed, geo$M_const, geo$M_cos, geo$M_sin)
   arcs <- if (identical(hclust_event, "trace")) {
@@ -292,7 +315,12 @@
   }
   if (verbose) cat(sprintf("[truncated-Fhclust-exact] r=%d p=%d theta=%.4f #arcs=%d\n",
                            red$r, red$p, geo$theta_obs, nrow(arcs)))
-  .truncF_result(red, arcs, X, cl_obs, k1, k2, "pair-preserved", ridge)
+  # Label the ACTUAL event: "trace" and "pair" are different conditioning sets, and
+  # an aggregator keying on condition_on must be able to tell them apart.
+  .truncF_result(red, arcs, X, cl_obs, k1, k2,
+                 if (identical(hclust_event, "trace")) "hclust-merge-trace"
+                 else "pair-preserved",
+                 ridge)
 }
 
 # ---- GRID (algorithm-agnostic, pair-preserved) --------------------------------
@@ -351,12 +379,14 @@
 #' No sampling, no burn-in, no mixing assumption.
 #'
 #' **Conditioning events.** `clustering = "kmeans"` conditions on the fixed-init
-#' Lloyd **trajectory** \eqn{E_\tau} (the k-means selection event); `"hclust"`
-#' conditions on the **cutree-K partition preserving the pair** -- the same event
-#' [selective_hotelling_bc()] and Gao et al. use (the stronger
-#' agglomeration-trajectory event over-conditions and loses power, so it is not
-#' used). Both closed-form feasible sets are verified against brute-force
-#' re-clustering.
+#' Lloyd **trajectory** \eqn{E_\tau} (the k-means selection event). For
+#' `"hclust"` the event is chosen by `hclust_event`: `"pair"` (default) is the
+#' **cutree-K partition preserving the pair** -- the same event
+#' [selective_hotelling_bc()] and Gao et al. use -- while `"trace"` is the
+#' **observed merge trace** (identical first \eqn{n-K} merges), a strictly
+#' stronger event whose feasible set is one component of the `"pair"` set. The
+#' relative power of the two hierarchical events is **unmeasured**. All
+#' closed-form feasible sets are verified against brute-force re-clustering.
 #'
 #' **What conditioning buys and costs.** Fixing the contrast *direction* makes the
 #' p-value a pivot free of \eqn{\Sigma}, so on this fiber knowing \eqn{\Sigma}
@@ -385,6 +415,14 @@
 #'   each merge criterion a min/max envelope of harmonics, and
 #'   Ward/centroid/median/McQuitty use different Lance-Williams weights, so the
 #'   single-harmonic reduction does not apply as-is).
+#' @param hclust_event Which hierarchical selection event to condition on for the
+#'   `"hclust"` `"exact"` route. `"pair"` (default) is the cutree-K
+#'   pair-preservation event, computed by an event-driven cell march with a
+#'   `max_cells` budget (a capped march yields `pval = NA`). `"trace"` conditions
+#'   on the observed merge trace -- the identical first \eqn{n-K} merges -- as a
+#'   one-shot conjunction of \eqn{O(n^2)} constraints, so it has no cell budget
+#'   and cannot cap; it is **strictly stronger** conditioning, and is derived for
+#'   **average linkage only**. Relative power of the two events is unmeasured.
 #' @param cl_fun A black-box clustering routine `function(Xmat) -> labels` for
 #'   `clustering = "custom"` (must be a pure function of its data). Also used as
 #'   the predicate for `method = "grid"`.

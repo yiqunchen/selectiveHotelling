@@ -495,8 +495,14 @@
 # the weaker "cutree-K preserves the tested pair". That is strictly more
 # conditioning -- R_T is one component of the union S = U_T R_T over traces whose
 # cut preserves the pair -- and it must be reported as such. What it buys is that
-# the event becomes a FIXED conjunction, so there is no cell march, no cell budget,
-# and hence no max_cells truncation and no fabricated p = 1.
+# the event becomes a FIXED conjunction, so there is no cell march and no cell
+# budget: it cannot hit max_cells, hence cannot return the NA that a truncated
+# march now yields (see .truncF_result). What it COSTS in power relative to the
+# pair-preserved event is UNMEASURED.
+#
+# LINKAGE: derived and verified for AVERAGE linkage only. The `upd` recursion
+# below is the unweighted Lance-Williams update, so passing a centroid/single/
+# complete dendrogram produces the WRONG constraint set. Callers must guard.
 #
 # THE LIFETIME REDUCTION. The march re-compares every active cluster pair at every
 # merge step, which is sum_s C(n_a, 2) ~ n^3/6 constraints (1.3M at n=200). But a
@@ -523,7 +529,15 @@
 # both harmonics, so each constraint is a harmonic and stays quartic-solvable.
 #' @keywords internal
 #' @noRd
-.hclust_trace_constraints <- function(pairH, hc_obs, K) {
+.hclust_trace_constraints <- function(pairH, hc_obs, K, method = "average") {
+  # AVERAGE LINKAGE ONLY. The sufficiency step needs h_{s+1} to be the size-weighted
+  # MEAN of two step-s endpoint-constrained distances. Centroid subtracts
+  # |G||H|d(G,H)/(|G|+|H|)^2 from that mean and can fall below h_s; single/complete
+  # are min/max envelopes, not a single harmonic. Guarded here as well as at the
+  # caller so the recursion below cannot be reached with the wrong update rule.
+  if (!identical(method, "average"))
+    stop(sprintf("lifetime/endpoint trace constraints are derived for average linkage only (got '%s')",
+                 method))
   n  <- nrow(pairH$A)
   q  <- n - K
   MA <- pairH$A; MB <- pairH$B; MC <- pairH$C; MD <- pairH$D; ME <- pairH$E
@@ -585,9 +599,9 @@
 #' @keywords internal
 #' @noRd
 .hclust_trace_arcs <- function(P, U, W, K, hc_obs, lo = 0, hi = pi / 2,
-                               pairH = NULL) {
+                               pairH = NULL, method = "average") {
   if (is.null(pairH)) pairH <- .hclust_pointpair_harmonics(P, U, W)
-  co <- .hclust_trace_constraints(pairH, hc_obs, K)
+  co <- .hclust_trace_constraints(pairH, hc_obs, K, method = method)
   arcs <- .harmonic_feasible_arcs(co, lo, hi)
   attr(arcs, "n_constraints") <- length(co$A)
   attr(arcs, "capped") <- FALSE          # fixed conjunction: nothing to run out of
@@ -595,10 +609,13 @@
 }
 
 # ---- EXACT hclust PAIR-PRESERVED arc via event-driven cell traversal ----------
-# Conditioning on the full agglomeration trajectory over-conditions and destroys
-# power (empirically ~5x lower); the scientifically correct hclust event -- the
-# one selective_hotelling_bc and Gao et al. (clusterpval) use -- is that the
-# cutree-K PARTITION preserves the tested pair. Along the geodesic that partition
+# Conditioning on the full agglomeration trajectory is STRICTLY STRONGER (see
+# .hclust_trace_constraints, which implements exactly that event); how much power
+# that costs on the hierarchical side is UNMEASURED -- no number is claimed here.
+# The event matched to selective_hotelling_bc and Gao et al. (clusterpval) is
+# instead the one computed below: that the cutree-K PARTITION preserves the tested
+# pair (the pair-preserved set is the UNION over all traces whose cut preserves the
+# pair, of which one trace region is a single component). Along the geodesic it
 # is piecewise-constant with harmonic-root boundaries. We enumerate its cells
 # EXACTLY: at each cell probe the current agglomeration order (one hclust run),
 # build its first-(n-K) merge constraints, and jump to the smallest harmonic root
@@ -669,12 +686,16 @@
     #     p >= N / (D + R)          (no future numerator, all future denominator)
     #     p <= (N + R') / (D + R')  (all future numerator feasible; D' >= N' always)
     # Once that bracket is tighter than mass_tol the remaining cells cannot move
-    # the answer, so we stop EXACTLY rather than running out of budget. This
-    # matters because the measure concentrates near hi while the march starts at
-    # lo: without it the march spends its whole budget on negligible mass, caps
-    # before reaching theta_obs, and then numerator == denominator returns a FAKE
-    # p-value of exactly 1 (measured: 0% of replicates at n=30, 4.5-15.6% at
-    # n=50, 100% at n=200).
+    # the answer, so the stop is EXACT (output-preserving: 5/5 p-values matched
+    # the no-early-stop march).
+    #
+    # KNOWN-WEAK, and deliberately kept anyway. In practice it almost NEVER fires,
+    # because the Beta measure concentrates near `hi` while the march arrives
+    # there LAST: until the tail is reached, R dominates and the bracket stays
+    # wide. So this does NOT rescue the capping problem -- a capped march still
+    # returns pval = NA (see .truncF_result), which is the actual safeguard.
+    # Fixing the capping needs a different march ORDER (or hclust_event="trace",
+    # which has no budget at all), not a tighter stopping rule.
     if (use_mass && pp) {
       lD <- .lse2(lD, lmass(th, nb))
       if (th < theta_obs) lN <- .lse2(lN, lmass(th, min(nb, theta_obs)))

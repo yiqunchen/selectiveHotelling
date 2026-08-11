@@ -136,3 +136,83 @@ test_that("small exactness sanity: exact hclust null p-values ~ uniform", {
   expect_lt(mean(ok), 0.66)
   expect_lt(mean(ok <= 0.05), 0.16)
 })
+
+# ---- hclust_event = "trace": the lifetime/endpoint characterisation -----------
+# Guards the theorem itself, not just the plumbing: the O(n^2) lifetime constraints
+# must hold at t EXACTLY when the first n-K merges are unchanged at t. Without this
+# a refactor of the Lance-Williams recursion breaks exactness silently.
+test_that("trace lifetime constraints characterise the merge trace exactly", {
+  e <- asNamespace("selectiveHotelling")
+  # canonical, label-free signature of the first n-K merges
+  trace_sig <- function(X, K) {
+    n <- nrow(X); hc <- stats::hclust(stats::dist(X)^2, method = "average")
+    mg <- hc$merge; node <- vector("list", n - 1L); sig <- character(0)
+    for (s in seq_len(n - 1L)) {
+      a <- mg[s, 1]; b <- mg[s, 2]
+      Gi <- if (a < 0) -a else node[[a]]; Hi <- if (b < 0) -b else node[[b]]
+      node[[s]] <- c(Gi, Hi)
+      if (s <= n - K)
+        sig <- c(sig, paste0(paste(sort(Gi), collapse = "."), "|",
+                             paste(sort(Hi), collapse = ".")))
+    }
+    paste(sig, collapse = " ")
+  }
+  set.seed(7)
+  for (K in c(3L, 4L)) {
+    n <- 22L; p <- 3L
+    X  <- matrix(stats::rnorm(n * p), n, p)
+    cl <- as.integer(stats::cutree(stats::hclust(stats::dist(X)^2, method = "average"), k = K))
+    tb <- sort(table(cl), decreasing = TRUE)
+    if (length(tb) < 2L || tb[2] < 3L) next
+    k1 <- as.integer(names(tb)[1]); k2 <- as.integer(names(tb)[2])
+    red <- e$.truncF_reduce(X, cl, k1, k2)
+    geo <- red$geo
+    PUW <- e$.geodesic_PUW(red$X_of_Q, red$prep$X_fixed,
+                           geo$M_const, geo$M_cos, geo$M_sin)
+    hc  <- stats::hclust(stats::dist(X)^2, method = "average")
+    co  <- e$.hclust_trace_constraints(
+             e$.hclust_pointpair_harmonics(PUW$P, PUW$U, PUW$W), hc, K)
+    expect_gt(length(co$A), 0L)
+    ref <- trace_sig(X, K)
+    ts  <- seq(1e-6, pi / 2 - 1e-6, length.out = 60L)
+    pred <- vapply(ts, function(t)
+      max(co$A * cos(2*t) + co$B * sin(2*t) + co$C * cos(t) +
+          co$D * sin(t) + co$E) <= 1e-9, logical(1))
+    act <- vapply(ts, function(t)
+      trace_sig(red$X_of_Q(geo$Qtheta(t)), K) == ref, logical(1))
+    expect_identical(pred, act)
+    # theta_obs must always be feasible: the observed data is in its own event
+    expect_true(max(co$A * cos(2*geo$theta_obs) + co$B * sin(2*geo$theta_obs) +
+                    co$C * cos(geo$theta_obs) + co$D * sin(geo$theta_obs) +
+                    co$E) <= 1e-8)
+  }
+})
+
+test_that("trace conditioning refuses non-average linkage and labels its event", {
+  # Average linkage chains off singletons, so a fixed seed often has no pair with
+  # >= 3 members. Search rather than skip: skipping would make this test vacuous.
+  X <- cl <- k1 <- k2 <- NULL
+  for (s in 1:60) {
+    set.seed(s)
+    Xc <- matrix(stats::rnorm(24L * 3L), 24L, 3L)
+    clc <- as.integer(stats::cutree(stats::hclust(stats::dist(Xc)^2, method = "average"), k = 3L))
+    tb  <- sort(table(clc), decreasing = TRUE)
+    if (length(tb) >= 2L && tb[2] >= 3L) {
+      X <- Xc; cl <- clc
+      k1 <- as.integer(names(tb)[1]); k2 <- as.integer(names(tb)[2])
+      break
+    }
+  }
+  expect_false(is.null(X))          # 60 seeds without a testable pair = real problem
+  # the theorem is average-linkage only -- must error, not return a wrong arc set
+  for (lk in c("centroid", "single", "complete"))
+    expect_error(selective_truncated_F(X, k1 = k1, k2 = k2, clustering = "hclust",
+                   method = "exact", K = 3L, cl_obs = cl, hclust_method = lk,
+                   hclust_event = "trace"), "average linkage only")
+  out <- selective_truncated_F(X, k1 = k1, k2 = k2, clustering = "hclust",
+           method = "exact", K = 3L, cl_obs = cl, hclust_method = "average",
+           hclust_event = "trace")
+  # "trace" and "pair" are DIFFERENT events and must not share a label
+  expect_identical(out$condition_on, "hclust-merge-trace")
+  expect_true(is.na(out$pval) || (out$pval >= 0 && out$pval <= 1))
+})

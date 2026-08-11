@@ -14,6 +14,7 @@ selective_truncated_F(
   init_centers_idx = NULL,
   hclust_method = "average",
   hclust_square = TRUE,
+  hclust_event = c("pair", "trace"),
   cl_fun = NULL,
   cl_obs = NULL,
   n_grid = 400L,
@@ -49,6 +50,15 @@ back to the linkage-correct \code{"grid"} engine (single/complete linkage make
 each merge criterion a min/max envelope of harmonics, and
 Ward/centroid/median/McQuitty use different Lance-Williams weights, so the
 single-harmonic reduction does not apply as-is).}
+
+\item{hclust_event}{Which hierarchical selection event to condition on for the
+\code{"hclust"} \code{"exact"} route. \code{"pair"} (default) is the cutree-K
+pair-preservation event, computed by an event-driven cell march with a
+\code{max_cells} budget (a capped march yields \code{pval = NA}). \code{"trace"} conditions
+on the observed merge trace -- the identical first \eqn{n-K} merges -- as a
+one-shot conjunction of \eqn{O(n^2)} constraints, so it has no cell budget
+and cannot cap; it is \strong{strictly stronger} conditioning, and is derived for
+\strong{average linkage only}. Relative power of the two events is unmeasured.}
 
 \item{cl_fun}{A black-box clustering routine \verb{function(Xmat) -> labels} for
 \code{clustering = "custom"} (must be a pure function of its data). Also used as
@@ -100,12 +110,14 @@ p-value is the truncated-Beta ratio
 No sampling, no burn-in, no mixing assumption.
 
 \strong{Conditioning events.} \code{clustering = "kmeans"} conditions on the fixed-init
-Lloyd \strong{trajectory} \eqn{E_\tau} (the k-means selection event); \code{"hclust"}
-conditions on the \strong{cutree-K partition preserving the pair} -- the same event
-\code{\link[=selective_hotelling_bc]{selective_hotelling_bc()}} and Gao et al. use (the stronger
-agglomeration-trajectory event over-conditions and loses power, so it is not
-used). Both closed-form feasible sets are verified against brute-force
-re-clustering.
+Lloyd \strong{trajectory} \eqn{E_\tau} (the k-means selection event). For
+\code{"hclust"} the event is chosen by \code{hclust_event}: \code{"pair"} (default) is the
+\strong{cutree-K partition preserving the pair} -- the same event
+\code{\link[=selective_hotelling_bc]{selective_hotelling_bc()}} and Gao et al. use -- while \code{"trace"} is the
+\strong{observed merge trace} (identical first \eqn{n-K} merges), a strictly
+stronger event whose feasible set is one component of the \code{"pair"} set. The
+relative power of the two hierarchical events is \strong{unmeasured}. All
+closed-form feasible sets are verified against brute-force re-clustering.
 
 \strong{What conditioning buys and costs.} Fixing the contrast \emph{direction} makes the
 p-value a pivot free of \eqn{\Sigma}, so on this fiber knowing \eqn{\Sigma}
