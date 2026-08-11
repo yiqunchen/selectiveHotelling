@@ -236,9 +236,11 @@
 #' @keywords internal
 #' @noRd
 .hclust_merge_structure <- function(X, K, method = "average", square = TRUE,
-                                    hc = NULL) {
+                                    hc = NULL, want_comp = FALSE) {
   n <- nrow(X)
-  # `hc` lets the caller pass the hclust it already built for the cell labelling.
+  # `hc` lets the caller pass the hclust it already built for the cell labelling;
+  # `want_comp` materialises the O(n^3) competitor-pair list, which only the
+  # envelope linkages (single/complete) still need.
   if (is.null(hc)) {
     d <- stats::dist(X); if (isTRUE(square)) d <- d^2
     hc <- stats::hclust(d, method = method)
@@ -261,25 +263,128 @@
   steps  <- vector("list", n - K)
   for (s in seq_len(n - K)) {
     Gi <- left_of[[s]]; Hi <- right_of[[s]]
-    kG <- min(Gi); kH <- min(Hi)
-    keep_other <- !(akey %in% c(kG, kH))
-    others     <- active[keep_other]
-    na    <- length(active)
-    npair <- if (na >= 2L) na * (na - 1L) / 2L - 1L else 0L   # all pairs minus (G,H)
-    comp  <- vector("list", max(npair, 0L))
-    nc <- 0L
-    if (na >= 2L) for (x in seq_len(na - 1L)) for (y in (x + 1L):na) {
-      kx <- akey[x]; ky <- akey[y]
-      if ((kx == kG && ky == kH) || (kx == kH && ky == kG)) next
-      nc <- nc + 1L
-      comp[[nc]] <- list(G = active[[x]], H = active[[y]])
+    na <- length(active)
+    # POSITIONS of the merging clusters in the active list. The Lance-Williams
+    # walker replays the same remove-two-append-one bookkeeping, so positions are
+    # enough and the O(n^2)-per-step `comp` list need not be materialised at all
+    # (it is O(n^3) overall, and only the envelope linkages still need it).
+    ix <- match(min(Gi), akey); iy <- match(min(Hi), akey)
+    st <- list(mG = Gi, mH = Hi, ix = ix, iy = iy, na = na)
+    if (isTRUE(want_comp)) {
+      npair <- if (na >= 2L) na * (na - 1L) / 2L - 1L else 0L
+      comp <- vector("list", max(npair, 0L)); nc <- 0L
+      if (na >= 2L) for (x in seq_len(na - 1L)) for (y in (x + 1L):na) {
+        if ((x == ix && y == iy) || (x == iy && y == ix)) next
+        nc <- nc + 1L
+        comp[[nc]] <- list(G = active[[x]], H = active[[y]])
+      }
+      length(comp) <- nc; st$comp <- comp
     }
-    length(comp) <- nc
-    steps[[s]] <- list(mG = Gi, mH = Hi, comp = comp)
-    active <- c(others, list(c(Gi, Hi)))     # perform the merge
-    akey   <- c(akey[keep_other], min(kG, kH))
+    steps[[s]] <- st
+    drop   <- c(ix, iy)
+    active <- c(active[-drop], list(c(Gi, Hi)))     # perform the merge
+    akey   <- c(akey[-drop], min(min(Gi), min(Hi)))
   }
   list(steps = steps, n = n, K = K)
+}
+
+# log(e^a + e^b), NA-safe in the -Inf ("zero mass") case.
+#' @keywords internal
+#' @noRd
+.lse2 <- function(a, b) {
+  if (!is.finite(a)) return(b)
+  if (!is.finite(b)) return(a)
+  m <- max(a, b); m + log(exp(a - m) + exp(b - m))
+}
+
+# ---- point-pair squared-distance harmonics (n x n, CELL-INDEPENDENT) ----------
+# These depend only on the geodesic (P, U, W), not on the cell being probed, so
+# they are built ONCE per arc traversal rather than once per cell.
+#' @keywords internal
+#' @noRd
+.hclust_pointpair_harmonics <- function(P, U, W) {
+  n <- nrow(P)
+  A <- B <- C <- D <- E <- matrix(0, n, n)
+  for (i in seq_len(n - 1L)) {
+    js <- (i + 1L):n
+    ii <- rep(i, length(js))
+    h  <- .sqdist_harmonic(P[js, , drop = FALSE] - P[ii, , drop = FALSE],
+                           U[js, , drop = FALSE] - U[ii, , drop = FALSE],
+                           W[js, , drop = FALSE] - W[ii, , drop = FALSE])
+    A[i, js] <- h$A; A[js, i] <- h$A;  B[i, js] <- h$B; B[js, i] <- h$B
+    C[i, js] <- h$C; C[js, i] <- h$C;  D[i, js] <- h$D; D[js, i] <- h$D
+    E[i, js] <- h$E; E[js, i] <- h$E
+  }
+  list(A = A, B = B, C = C, D = D, E = E)
+}
+
+# ---- next merge-order breakpoint after `th` (average / centroid) --------------
+# Replaces the "materialise every constraint, then solve" path for the two
+# SINGLE-HARMONIC linkages. Cluster-pair linkage harmonics obey the same
+# Lance-Williams recursion as the distances they encode (the identity holds at
+# every t, and both sides are harmonics of the same form, so it holds coefficient
+# by coefficient), so the na x na coefficient matrices are UPDATED across merges
+# instead of recomputed from members. Per step the constraints are then a
+# vectorised matrix subtraction, and only the ones that can cross zero are sent to
+# the root solver. Returns the smallest root in (th, hi], or Inf if none.
+#' @keywords internal
+#' @noRd
+.hclust_traj_next_root <- function(pairH, mstruct, th, hi, method = "average") {
+  if (!(method %in% c("average", "centroid")))
+    stop("Lance-Williams breakpoint path supports average/centroid only")
+  MA <- pairH$A; MB <- pairH$B; MC <- pairH$C; MD <- pairH$D; ME <- pairH$E
+  sz <- rep(1, mstruct$n)
+  best <- Inf
+  for (st in mstruct$steps) {
+    ix <- st$ix; iy <- st$iy; na <- nrow(MA)
+    if (na >= 2L) {
+      ut <- upper.tri(MA)
+      # merged-pair linkage minus every competitor's: g_j(t) <= 0 must hold.
+      dA <- MA[ix, iy] - MA[ut]; dB <- MB[ix, iy] - MB[ut]
+      dC <- MC[ix, iy] - MC[ut]; dD <- MD[ix, iy] - MD[ut]; dE <- ME[ix, iy] - ME[ut]
+      # LIPSCHITZ PRUNE. Root-finding costs ~150us per constraint (a companion-
+      # matrix solve) and there are O(n^3) of them, so the amplitude test |E| <= M
+      # -- which only rejects ~15% -- is nowhere near selective enough. Instead use
+      # |g_j'| <= L_j = 2 sqrt(A^2+B^2) + sqrt(C^2+D^2): from g_j(th) <= 0,
+      #     g_j(t) <= g_j(th) + L_j (t - th)   for t >= th,
+      # so a constraint whose bound stays negative across (th, ub] has NO root
+      # there and can be dropped outright. Cells are narrow (ub - th is small), so
+      # this rejects almost everything. It can never discard a real crossing.
+      g0 <- dA * cos(2 * th) + dB * sin(2 * th) + dC * cos(th) + dD * sin(th) + dE
+      Lj <- 2 * sqrt(dA * dA + dB * dB) + sqrt(dC * dC + dD * dD)
+      ub <- min(best, hi)
+      cand <- which(Lj > 1e-12 & g0 + Lj * (ub - th) >= -1e-12)
+      # Solve in chunks, largest g_j(th) first: those cross soonest, so `best`
+      # tightens early and the remaining chunks re-prune against it.
+      if (length(cand)) {
+        ord <- cand[order(g0[cand], decreasing = TRUE)]
+        i <- 1L
+        while (i <= length(ord)) {
+          j  <- ord[i:min(i + 511L, length(ord))]
+          ub <- min(best, hi)
+          j  <- j[g0[j] + Lj[j] * (ub - th) >= -1e-12]
+          if (length(j)) {
+            rb  <- .harmonic_roots_batch(dA[j], dB[j], dC[j], dD[j], dE[j])
+            rts <- rb$t[rb$t > th + 1e-9 & rb$t <= ub + 1e-9]
+            if (length(rts)) best <- min(best, min(rts))
+          }
+          i <- i + 512L
+        }
+      }
+    }
+    wG <- sz[ix]; wH <- sz[iy]; wn <- wG + wH
+    keep <- seq_len(na)[-c(ix, iy)]
+    upd <- function(M) {
+      nr <- (wG * M[ix, ] + wH * M[iy, ]) / wn
+      # centroid (UPGMC) carries the extra -wG wH d(G,H)/wn^2 Lance-Williams term
+      if (identical(method, "centroid")) nr <- nr - wG * wH * M[ix, iy] / (wn * wn)
+      nr <- nr[keep]
+      rbind(cbind(M[keep, keep, drop = FALSE], nr), c(nr, 0))
+    }
+    MA <- upd(MA); MB <- upd(MB); MC <- upd(MC); MD <- upd(MD); ME <- upd(ME)
+    sz <- c(sz[keep], wn)
+  }
+  best
 }
 
 # ---- hierarchical agglomeration-trajectory constraint harmonics ---------------
@@ -300,7 +405,8 @@
 # must route any other linkage to the (linkage-correct) grid engine.
 #' @keywords internal
 #' @noRd
-.hclust_traj_coeffs <- function(P, U, W, mstruct, method = "average") {
+.hclust_traj_coeffs <- function(P, U, W, mstruct, method = "average",
+                                pairH = NULL) {
   supported <- c("average", "centroid", "single", "complete")
   if (!(method %in% supported))
     stop(sprintf(paste0("closed-form hclust breakpoint harmonics are implemented for ",
@@ -310,21 +416,12 @@
   n <- nrow(P)
 
   # Point-pair harmonics (n x n) are needed by average and by the single/complete
-  # envelope; centroid uses member centroids instead.
+  # envelope; centroid uses member centroids instead. `pairH` lets a caller that
+  # traverses many cells on ONE geodesic build them once.
   if (method %in% c("average", "single", "complete")) {
-    Amat <- Bmat <- Cmat <- Dmat <- Emat <- matrix(0, n, n)
-    for (i in seq_len(n - 1L)) {
-      js <- (i + 1L):n
-      dP <- P[js, , drop = FALSE] - P[rep(i, length(js)), , drop = FALSE]
-      dU <- U[js, , drop = FALSE] - U[rep(i, length(js)), , drop = FALSE]
-      dW <- W[js, , drop = FALSE] - W[rep(i, length(js)), , drop = FALSE]
-      h  <- .sqdist_harmonic(dP, dU, dW)
-      Amat[i, js] <- h$A; Amat[js, i] <- h$A
-      Bmat[i, js] <- h$B; Bmat[js, i] <- h$B
-      Cmat[i, js] <- h$C; Cmat[js, i] <- h$C
-      Dmat[i, js] <- h$D; Dmat[js, i] <- h$D
-      Emat[i, js] <- h$E; Emat[js, i] <- h$E
-    }
+    if (is.null(pairH)) pairH <- .hclust_pointpair_harmonics(P, U, W)
+    Amat <- pairH$A; Bmat <- pairH$B; Cmat <- pairH$C
+    Dmat <- pairH$D; Emat <- pairH$E
   }
 
   # ---- SINGLE-HARMONIC linkages (average, centroid): one harmonic per comparison
@@ -402,13 +499,21 @@
 .hclust_pairpreserved_arcs <- function(P, U, W, X_of_Q, Qtheta, K,
                                        cl_obs, k1, k2, method = "average",
                                        square = TRUE, lo = 0, hi = pi / 2,
-                                       eps = 1e-7, max_cells = 500L) {
+                                       eps = 1e-7, max_cells = 500L,
+                                       theta_obs = NULL, lmass = NULL,
+                                       mass_tol = 1e-6) {
   labels_at <- function(th) {
     Xt <- X_of_Q(Qtheta(th)); d <- stats::dist(Xt); if (isTRUE(square)) d <- d^2
     as.integer(stats::cutree(stats::hclust(d, method = method), k = K))
   }
+  # Point-pair harmonics depend on the geodesic only, so they are built ONCE for
+  # the whole traversal rather than rebuilt inside every cell.
+  fast  <- method %in% c("average", "centroid")
+  pairH <- .hclust_pointpair_harmonics(P, U, W)
   cells_lo <- numeric(0); cells_hi <- numeric(0); cells_pp <- logical(0)
   th <- lo; guard <- 0L; n_floor <- 0L
+  use_mass <- !is.null(theta_obs) && !is.null(lmass)
+  lN <- -Inf; lD <- -Inf; early <- FALSE; bracket <- NULL
   while (th < hi - 1e-12 && guard < max_cells) {
     guard <- guard + 1L
     probe <- min(th + eps, hi - 1e-12)
@@ -417,28 +522,62 @@
     d_cell <- stats::dist(Xp); if (isTRUE(square)) d_cell <- d_cell^2
     hc_cell <- stats::hclust(d_cell, method = method)
     cl_cell <- as.integer(stats::cutree(hc_cell, k = K))
-    ms_cell <- .hclust_merge_structure(Xp, K, method, square, hc = hc_cell)
-    co <- .hclust_traj_coeffs(P, U, W, ms_cell, method = method)
+    ms_cell <- .hclust_merge_structure(Xp, K, method, square, hc = hc_cell,
+                                       want_comp = !fast)
     nb <- hi
-    if (length(co$A)) {
-      # |g_j| <= M + |E| with M = sqrt(A^2+B^2) + sqrt(C^2+D^2), so |E| > M means
-      # g_j never crosses zero and contributes no breakpoint. Output-preserving:
-      # nb is a min over roots and pruned constraints have none.
-      Aj <- co$A; Bj <- co$B; Cj <- co$C; Dj <- co$D; Ej <- co$E
-      Mj <- sqrt(Aj * Aj + Bj * Bj) + sqrt(Cj * Cj + Dj * Dj)
-      cand <- which(abs(Ej) <= Mj + 1e-12)
-      if (length(cand)) {
-        rb  <- .harmonic_roots_batch(Aj[cand], Bj[cand], Cj[cand], Dj[cand], Ej[cand])
-        rts <- rb$t[rb$t > th + 1e-9 & rb$t <= hi + 1e-9]
-        if (length(rts)) nb <- min(nb, min(rts))
+    if (fast) {
+      r <- .hclust_traj_next_root(pairH, ms_cell, th, hi, method = method)
+      if (is.finite(r)) nb <- min(nb, r)
+    } else {
+      co <- .hclust_traj_coeffs(P, U, W, ms_cell, method = method, pairH = pairH)
+      if (length(co$A)) {
+        # |g_j| <= M + |E| with M = sqrt(A^2+B^2) + sqrt(C^2+D^2), so |E| > M means
+        # g_j never crosses zero and contributes no breakpoint. Output-preserving:
+        # nb is a min over roots and pruned constraints have none.
+        Aj <- co$A; Bj <- co$B; Cj <- co$C; Dj <- co$D; Ej <- co$E
+        Mj <- sqrt(Aj * Aj + Bj * Bj) + sqrt(Cj * Cj + Dj * Dj)
+        cand <- which(abs(Ej) <= Mj + 1e-12)
+        if (length(cand)) {
+          rb  <- .harmonic_roots_batch(Aj[cand], Bj[cand], Cj[cand], Dj[cand], Ej[cand])
+          rts <- rb$t[rb$t > th + 1e-9 & rb$t <= hi + 1e-9]
+          if (length(rts)) nb <- min(nb, min(rts))
+        }
       }
     }
     if (nb <= th + 1e-12) {                # numeric floor (never stall)
       nb <- min(th + 1e-4, hi); n_floor <- n_floor + 1L
     }
     cells_lo <- c(cells_lo, th); cells_hi <- c(cells_hi, nb)
-    cells_pp <- c(cells_pp, .bc_pair_preserved(cl_obs, cl_cell, k1, k2))
+    pp <- .bc_pair_preserved(cl_obs, cl_cell, k1, k2)
+    cells_pp <- c(cells_pp, pp)
+    # CERTIFIED EARLY STOP. The p-value is a ratio of measure over the feasible
+    # set, mass(S n [0,theta_obs)) / mass(S), and the measure of the UNEXPLORED
+    # tail is available in closed form without knowing feasibility there --
+    # feasibility can only remove mass. So with N, D accumulated so far,
+    # R = mass(nb, hi] and R' = mass(nb, min(theta_obs, hi)],
+    #     p >= N / (D + R)          (no future numerator, all future denominator)
+    #     p <= (N + R') / (D + R')  (all future numerator feasible; D' >= N' always)
+    # Once that bracket is tighter than mass_tol the remaining cells cannot move
+    # the answer, so we stop EXACTLY rather than running out of budget. This
+    # matters because the measure concentrates near hi while the march starts at
+    # lo: without it the march spends its whole budget on negligible mass, caps
+    # before reaching theta_obs, and then numerator == denominator returns a FAKE
+    # p-value of exactly 1 (measured: 0% of replicates at n=30, 4.5-15.6% at
+    # n=50, 100% at n=200).
+    if (use_mass && pp) {
+      lD <- .lse2(lD, lmass(th, nb))
+      if (th < theta_obs) lN <- .lse2(lN, lmass(th, min(nb, theta_obs)))
+    }
     th <- nb
+    if (use_mass && is.finite(lD)) {
+      lR  <- lmass(th, hi)
+      lRp <- if (th < theta_obs) lmass(th, min(theta_obs, hi)) else -Inf
+      b_lo <- exp(lN - .lse2(lD, lR))
+      b_hi <- exp(.lse2(lN, lRp) - .lse2(lD, lRp))
+      if (is.finite(b_lo) && is.finite(b_hi) && b_hi - b_lo <= mass_tol) {
+        early <- TRUE; bracket <- c(b_lo, b_hi); break
+      }
+    }
   }
   # merge adjacent preserved cells into maximal arcs
   arcs <- matrix(numeric(0), ncol = 2)
@@ -456,13 +595,17 @@
   # is INCOMPLETE and a p-value built from it has the wrong denominator. Warn and
   # record rather than returning a silently truncated answer. n_floor counts the
   # 1e-4 fallback steps, each a non-analytic boundary placement.
-  capped <- (guard >= max_cells) && (th < hi - 1e-12)
+  # An EARLY stop is not a truncation: the bracket certifies the remaining mass
+  # cannot move the p-value by more than mass_tol. Only running out of budget is.
+  capped <- (guard >= max_cells) && (th < hi - 1e-12) && !early
   if (capped)
     warning(sprintf(paste0("hclust arc march hit max_cells=%d at theta=%.6g of %.6g: ",
                            "arc set is TRUNCATED, p-value not exact. Raise max_cells."),
                     max_cells, th, hi), call. = FALSE)
   attr(arcs, "n_cells") <- guard
   attr(arcs, "capped")  <- capped
+  attr(arcs, "early")   <- early
+  attr(arcs, "bracket") <- bracket
   attr(arcs, "reached") <- th
   attr(arcs, "n_floor") <- n_floor
   arcs

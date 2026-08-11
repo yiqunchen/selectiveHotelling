@@ -57,8 +57,7 @@
 # ---- closed-form upper-tail selective p-value from truncated Beta(H=cos^2 th) --
 #' @keywords internal
 #' @noRd
-.truncF_pvalue <- function(intervals, theta_obs, p, r) {
-  alpha <- p / 2; beta <- (r - 1 - p) / 2
+.truncF_lbmass <- function(alpha, beta) {
 
   # LOG-SPACE Beta mass. The natural form,
   #     pbeta(cos(lo)^2) - pbeta(cos(hi)^2),
@@ -84,7 +83,7 @@
   # to first order and cannot cancel at all. Only the RATIO is used and both
   # numerator and denominator go through this same routine, so any residual
   # first-order error largely cancels.
-  lbmass <- function(lo, hi) {
+  function(lo, hi) {
     if (hi <= lo) return(-Inf)
     xl <- cos(hi)^2                      # smaller x  (theta larger)
     xu <- cos(lo)^2                      # larger  x  (theta smaller)
@@ -105,6 +104,11 @@
     # narrow-arc fallback: log( f(mid) * (xu - xl) )
     stats::dbeta(mid, alpha, beta, log = TRUE) + log(xu - xl)
   }
+}
+
+.truncF_pvalue <- function(intervals, theta_obs, p, r) {
+  alpha <- p / 2; beta <- (r - 1 - p) / 2
+  lbmass <- .truncF_lbmass(alpha, beta)
   logsumexp <- function(v) {
     v <- v[is.finite(v)]
     if (!length(v)) return(-Inf)
@@ -256,8 +260,15 @@
   }
   red <- .truncF_reduce(X, cl_obs, k1, k2); geo <- red$geo
   PUW <- .geodesic_PUW(red$X_of_Q, red$prep$X_fixed, geo$M_const, geo$M_cos, geo$M_sin)
+  # Hand the march the SAME Beta measure the p-value uses, so it can stop as soon
+  # as the unexplored tail provably cannot move the ratio (see the early-stop note
+  # in .hclust_pairpreserved_arcs). Without this the march caps mid-range and the
+  # p-value degenerates to exactly 1.
   arcs <- .hclust_pairpreserved_arcs(PUW$P, PUW$U, PUW$W, red$X_of_Q, geo$Qtheta,
-                                     K, cl_obs, k1, k2, hclust_method, hclust_square)
+                                     K, cl_obs, k1, k2, hclust_method, hclust_square,
+                                     theta_obs = geo$theta_obs,
+                                     lmass = .truncF_lbmass(red$p / 2,
+                                                            (red$r - 1 - red$p) / 2))
   if (verbose) cat(sprintf("[truncated-Fhclust-exact] r=%d p=%d theta=%.4f #arcs=%d\n",
                            red$r, red$p, geo$theta_obs, nrow(arcs)))
   .truncF_result(red, arcs, X, cl_obs, k1, k2, "pair-preserved", ridge)
