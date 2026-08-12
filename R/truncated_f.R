@@ -26,8 +26,12 @@
 #       (harmonic_arc.R::.hclust_trace_arcs). No march, no cell budget, so it
 #       cannot cap. This is STRICTLY STRONGER conditioning than "pair" (the
 #       pair-preserved set is the union over all traces whose cut preserves the
-#       pair), so it must be reported as a different event. Its power relative to
-#       "pair" is UNMEASURED on the hierarchical side -- do not assume either way.
+#       pair), so it must be reported as a different event. MEASURED 2026-08-12:
+#       this event has essentially NO POWER -- its p-values are uniform under the
+#       alternative (cs, p=10, delta=12, recovery 1.00: median p 0.506 vs 0.0011 for
+#       the BC test; power@.05 0.063 vs 1.000). Type-I is correct, so it is VALID but
+#       not useful for inference; keep it as a negative result about over-conditioning
+#       and use selective_hotelling_bc(). See aug-task.md 1m.
 #       DERIVED FOR AVERAGE LINKAGE ONLY (see .hclust_trace_constraints).
 #   * method = "grid" (or clustering = "custom")  -> algorithm-agnostic feasible
 #       set of an arbitrary cl_fun via dense grid + bisection (pair-preserved).

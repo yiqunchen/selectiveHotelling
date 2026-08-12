@@ -497,8 +497,25 @@
 # cut preserves the pair -- and it must be reported as such. What it buys is that
 # the event becomes a FIXED conjunction, so there is no cell march and no cell
 # budget: it cannot hit max_cells, hence cannot return the NA that a truncated
-# march now yields (see .truncF_result). What it COSTS in power relative to the
-# pair-preserved event is UNMEASURED.
+# march now yields (see .truncF_result).
+#
+# WHAT IT COSTS: EVERYTHING. Measured 2026-08-12 (job 2044756, 72 power cells x 300
+# reps, n=200): this event has NO POWER. Its p-values are uniform under the
+# alternative, so power equals the nominal level in every cell and at every delta up
+# to 12 (0.03-0.13, against 1.000 for the BC test). Clinching cell -- cs, p=10,
+# delta=12, cluster recovery 1.00: BC median p 0.0011 / max 0.0342 / power 1.000;
+# trace median p 0.506 / power 0.063, KS-uniform p 0.187.
+#
+# WHY, structurally: the trace-valid region is a single tiny arc containing
+# theta_obs, so the p-value is essentially the relative position of theta_obs inside
+# its OWN arc -- uniform whether or not a signal is present. Conditioning on the
+# exact merge sequence conditions away the quantity being tested. No algorithmic
+# improvement recovers this; it is a property of the event.
+#
+# So this engine is EXACT and VALID (Type-I 0.044-0.071 across 12 cells, KS p >=
+# 0.12, including p=50 at n=200 where the march cannot run) but is NOT an
+# inferential method. Keep it as a negative result about over-conditioning; use
+# selective_hotelling_bc(). See aug-task.md 1m.
 #
 # LINKAGE: derived and verified for AVERAGE linkage only. The `upd` recursion
 # below is the unweighted Lance-Williams update, so passing a centroid/single/

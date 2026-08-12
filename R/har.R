@@ -239,6 +239,20 @@ selective_hotelling_har <- function(X, k1, k2, K = 3L, init_centers_idx = NULL,
   arcs <- .hclust_pairpreserved_arcs(puw$P, puw$U, puw$W, X_of_Q, Qtheta, K,
                                      cl_obs, k1, k2, method = method,
                                      square = square, lo = 0, hi = 2 * pi)
+  # A TRUNCATED arc set is fatal for a SAMPLER, not merely inaccurate. The draw
+  # below is uniform over `arcs`; if the march ran out of cells, `arcs` is a strict
+  # SUBSET of the feasible set, so the kernel is no longer uniform on E and the
+  # chain's stationary law is silently wrong -- there is no symptom in the output.
+  # This is not a rare corner: the march covers the FULL circle here with the same
+  # max_cells budget the quarter-circle p-value path uses, and 15/15 steps capped at
+  # n=60 (500 cells each, 3738 s). Refuse rather than return a corrupted draw.
+  if (isTRUE(attr(arcs, "capped")))
+    stop(sprintf(paste0("hclust HAR: the arc march hit its cell budget (reached ",
+                        "theta=%.4g of %.4g), so the feasible set is TRUNCATED and a ",
+                        "uniform draw from it would not be uniform on the selection ",
+                        "event. Use selective_hotelling_bc() (black-box, exact at any ",
+                        "M) instead."),
+                 attr(arcs, "reached"), 2 * pi), call. = FALSE)
   if (!nrow(arcs)) return(Q)
   len <- arcs[, 2] - arcs[, 1]; total <- sum(len)
   if (total <= 0) return(Q)
@@ -265,6 +279,16 @@ selective_hotelling_har <- function(X, k1, k2, K = 3L, init_centers_idx = NULL,
 #' (`"average"`, `"centroid"`); for any other linkage there is no closed-form arc,
 #' so use the black-box [selective_hotelling_bc()] instead (this function will
 #' error via its arc engine).
+#'
+#' @section Scales poorly, and errors rather than corrupt the chain:
+#' Each HAR step runs the arc march over the **full circle**, and the march's cell
+#' count grows steeply with \eqn{n}. Measured at \eqn{n = 60}: every one of 15 steps
+#' exhausted the 500-cell budget, taking 3738 s in total. Because the kernel draws
+#' uniformly from the returned arcs, a truncated arc set would make the chain's
+#' stationary law silently wrong rather than merely imprecise, so the step now
+#' **errors** when the march caps. In practice that makes this function usable only
+#' at small \eqn{n}; prefer [selective_hotelling_bc()], which is black-box and exact
+#' at any `M`, or the closed-form [selective_truncated_F()].
 #'
 #' @param X A numeric \eqn{n \times p} data matrix with observations in rows.
 #' @param k1,k2 The two tested cluster labels (in the labelling of

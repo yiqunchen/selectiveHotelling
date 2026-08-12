@@ -65,6 +65,18 @@ Closed-form arcs are exact only for the \strong{single-harmonic} linkages
 so use the black-box \code{\link[=selective_hotelling_bc]{selective_hotelling_bc()}} instead (this function will
 error via its arc engine).
 }
+\section{Scales poorly, and errors rather than corrupt the chain}{
+
+Each HAR step runs the arc march over the \strong{full circle}, and the march's cell
+count grows steeply with \eqn{n}. Measured at \eqn{n = 60}: every one of 15 steps
+exhausted the 500-cell budget, taking 3738 s in total. Because the kernel draws
+uniformly from the returned arcs, a truncated arc set would make the chain's
+stationary law silently wrong rather than merely imprecise, so the step now
+\strong{errors} when the march caps. In practice that makes this function usable only
+at small \eqn{n}; prefer \code{\link[=selective_hotelling_bc]{selective_hotelling_bc()}}, which is black-box and exact
+at any \code{M}, or the closed-form \code{\link[=selective_truncated_F]{selective_truncated_F()}}.
+}
+
 \seealso{
 \code{\link[=selective_hotelling_har]{selective_hotelling_har()}}, \code{\link[=selective_hotelling_bc]{selective_hotelling_bc()}},
 \code{\link[=selective_truncated_F]{selective_truncated_F()}}
