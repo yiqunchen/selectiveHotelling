@@ -22,6 +22,14 @@
 # regardless of mixing; mixing only buys power. See selective_hotelling_bc for the
 # general (any-clustering) black-box counterpart, which is what you fall back to
 # when the clustering rule has no closed-form geodesic constraints.
+#
+# NOTE: there is deliberately NO hclust twin of this test. The hierarchical
+# analytic-arc HAR was implemented and removed: its per-step arc march runs over
+# the full circle and its cell count grows steeply with n, so at n = 60 every one
+# of 15 steps exhausted the 500-cell budget (3738 s total) and a truncated arc set
+# would have made the chain's stationary law silently wrong. Use the black-box
+# selective_hotelling_bc() (exact at any M) or the closed-form
+# selective_truncated_F() for hierarchical clustering.
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -209,176 +217,6 @@ selective_hotelling_har <- function(X, k1, k2, K = 3L, init_centers_idx = NULL,
     k1 = k1, k2 = k2, K = length(unique(cl_obs)),
     condition_on = "kmeans-trajectory",
     sampler = "har-analytic",
-    p_cons = p_cons, M = M, L = L, u_obs = u_obs, path_u = path_u, J = J,
-    stiefel_max = stiefel_max
-  )
-  class(out) <- "selectiveHotelling"
-  out
-}
-
-# =============================================================================
-# HIERARCHICAL analytic-arc HAR (T6): the hclust twin of selective_hotelling_har.
-# Same Besag-Clifford wrapper, same full T^2, same two-row Givens geodesic HAR --
-# but the feasible arcs come from .hclust_pairpreserved_arcs (the cutree-K
-# PAIR-PRESERVED event via event-driven cell traversal), so this conditions on
-# the hclust CUT event (what selective_hotelling_bc and Gao et al. use), not a
-# trajectory. Closed-form breakpoints are exact for the SINGLE-HARMONIC linkages
-# (average, centroid); other linkages have no closed-form arcs -> use
-# selective_hotelling_bc (black-box) instead.
-# =============================================================================
-
-# ---- one hierarchical analytic-arc HAR step (pair-preserved cut event) --------
-#' @keywords internal
-#' @noRd
-.hclust_har_step <- function(Q, X_of_Q, X_fixed, K, cl_obs, k1, k2,
-                             method, square) {
-  rq <- nrow(Q)
-  ij <- sample.int(rq, 2L); i <- ij[1]; j <- ij[2]
-  puw    <- .har_givens_PUW(X_of_Q, X_fixed, Q, i, j)
-  Qtheta <- function(th) givens_left(Q, i, j, th)
-  arcs <- .hclust_pairpreserved_arcs(puw$P, puw$U, puw$W, X_of_Q, Qtheta, K,
-                                     cl_obs, k1, k2, method = method,
-                                     square = square, lo = 0, hi = 2 * pi)
-  # A TRUNCATED arc set is fatal for a SAMPLER, not merely inaccurate. The draw
-  # below is uniform over `arcs`; if the march ran out of cells, `arcs` is a strict
-  # SUBSET of the feasible set, so the kernel is no longer uniform on E and the
-  # chain's stationary law is silently wrong -- there is no symptom in the output.
-  # This is not a rare corner: the march covers the FULL circle here with the same
-  # max_cells budget the quarter-circle p-value path uses, and 15/15 steps capped at
-  # n=60 (500 cells each, 3738 s). Refuse rather than return a corrupted draw.
-  if (isTRUE(attr(arcs, "capped")))
-    stop(sprintf(paste0("hclust HAR: the arc march hit its cell budget (reached ",
-                        "theta=%.4g of %.4g), so the feasible set is TRUNCATED and a ",
-                        "uniform draw from it would not be uniform on the selection ",
-                        "event. Use selective_hotelling_bc() (black-box, exact at any ",
-                        "M) instead."),
-                 attr(arcs, "reached"), 2 * pi), call. = FALSE)
-  if (!nrow(arcs)) return(Q)
-  len <- arcs[, 2] - arcs[, 1]; total <- sum(len)
-  if (total <= 0) return(Q)
-  u <- stats::runif(1, 0, total); cum <- cumsum(len)
-  wa <- which(u <= cum)[1]
-  prev <- if (wa == 1L) 0 else cum[wa - 1L]
-  theta <- arcs[wa, 1] + (u - prev)
-  givens_left(Q, i, j, theta)
-}
-
-#' Analytic-arc uniform-Q hit-and-run selective Hotelling test (hierarchical clustering)
-#'
-#' @description
-#' The hierarchical-clustering counterpart of [selective_hotelling_har()]: an exact
-#' (finite-sample \eqn{\mathrm{Uniform}(0,1)} under \eqn{H_0}) selective test of a
-#' discovered cluster pair `(k1, k2)`, with \eqn{\Sigma} unknown, using the same
-#' Besag--Clifford wrapper and full Hotelling \eqn{T^2} but a **closed-form**
-#' analytic-arc hit-and-run kernel. Conditioning is on the **cutree-\eqn{K}
-#' pair-preserved** event (the same event [selective_hotelling_bc()] uses), whose
-#' feasible arcs are computed in closed form per Givens plane via event-driven
-#' cell traversal.
-#'
-#' Closed-form arcs are exact only for the **single-harmonic** linkages
-#' (`"average"`, `"centroid"`); for any other linkage there is no closed-form arc,
-#' so use the black-box [selective_hotelling_bc()] instead (this function will
-#' error via its arc engine).
-#'
-#' @section Scales poorly, and errors rather than corrupt the chain:
-#' Each HAR step runs the arc march over the **full circle**, and the march's cell
-#' count grows steeply with \eqn{n}. Measured at \eqn{n = 60}: every one of 15 steps
-#' exhausted the 500-cell budget, taking 3738 s in total. Because the kernel draws
-#' uniformly from the returned arcs, a truncated arc set would make the chain's
-#' stationary law silently wrong rather than merely imprecise, so the step now
-#' **errors** when the march caps. In practice that makes this function usable only
-#' at small \eqn{n}; prefer [selective_hotelling_bc()], which is black-box and exact
-#' at any `M`, or the closed-form [selective_truncated_F()].
-#'
-#' @param X A numeric \eqn{n \times p} data matrix with observations in rows.
-#' @param k1,k2 The two tested cluster labels (in the labelling of
-#'   `hclust_fun(X, k = K, method = hclust_method, square = hclust_square)`). Each
-#'   cluster must have at least three members.
-#' @param K Number of clusters to cut the dendrogram into.
-#' @param hclust_method Agglomeration method; closed-form arcs require `"average"`
-#'   or `"centroid"`.
-#' @param hclust_square If `TRUE` (default) the tree is built on squared Euclidean
-#'   distances (the `clusterpval` convention; also the convention centroid linkage
-#'   requires).
-#' @param M,L Besag--Clifford path length and analytic-arc HAR steps per edge.
-#' @param randomized If `TRUE` (default) the randomized upper-tail rank p-value.
-#' @param ridge Small non-negative ridge for the reported observed \eqn{T^2}.
-#' @param cl_obs Optional precomputed observed clustering (saves one call).
-#' @param verbose If `TRUE`, print a one-line diagnostic.
-#'
-#' @return An S3 `"selectiveHotelling"` object with `pval`, `se`, `T_obs`, `k1`,
-#'   `k2`, `K`, `condition_on = "pair-preserved"`, `sampler = "har-analytic"`, and
-#'   the same diagnostics as [selective_hotelling_har()].
-#'
-#' @seealso [selective_hotelling_har()], [selective_hotelling_bc()],
-#'   [selective_truncated_F()]
-#' @export
-selective_hclust_har <- function(X, k1, k2, K = 3L,
-                                 hclust_method = "average", hclust_square = TRUE,
-                                 M = 300L, L = 2L, randomized = TRUE,
-                                 ridge = 1e-8, cl_obs = NULL, verbose = FALSE) {
-  stopifnot(is.matrix(X), M >= 1L, L >= 1L)
-  M <- as.integer(M); L <- as.integer(L)
-  if (!(hclust_method %in% c("average", "centroid")))
-    stop(sprintf(paste0("closed-form analytic-arc HAR needs a single-harmonic linkage ",
-                        "(average, centroid); got '%s'. Use selective_hotelling_bc() ",
-                        "for this linkage."), hclust_method))
-
-  if (is.null(cl_obs))
-    cl_obs <- hclust_fun(X, k = K, method = hclust_method, square = hclust_square)$cluster
-  cl_obs <- as.integer(cl_obs)
-  if (sum(cl_obs == k1) < 3L || sum(cl_obs == k2) < 3L)
-    stop("Tested clusters must each have >= 3 members for a Hotelling T^2.")
-
-  prep <- prepare_pair_objects(X, cl_obs, k1, k2)
-  m <- prep$m; r <- prep$r
-  X_fixed <- prep$X_fixed
-  X_of_Q <- function(Q) {
-    AQS <- prep$A %*% Q %*% prep$S_sqrt
-    XQ <- prep$X_fixed
-    XQ[prep$idx1, ] <- XQ[prep$idx1, ] + AQS[1:m, , drop = FALSE]
-    XQ[prep$idx2, ] <- XQ[prep$idx2, ] + AQS[(m + 1):r, , drop = FALSE]
-    XQ
-  }
-  Q_obs <- prep$Q_obs
-  n1 <- m; n2 <- r - m
-  contrast <- c(rep(1 / n1, n1), rep(-1 / n2, n2))
-  v <- as.numeric(crossprod(prep$A, contrast))
-  uval  <- function(Q) sum(crossprod(Q, v)^2)
-  u_obs <- uval(Q_obs)
-
-  Ip <- diag(ncol(Q_obs)); stiefel_max <- max(abs(crossprod(Q_obs) - Ip))
-
-  J <- sample.int(M + 1L, 1L) - 1L
-  path_u <- numeric(M + 1L); path_u[J + 1L] <- u_obs
-  step <- function(Q) .hclust_har_step(Q, X_of_Q, X_fixed, K, cl_obs, k1, k2,
-                                       hclust_method, hclust_square)
-  kern <- function(Q) { for (s in seq_len(L)) Q <- step(Q); Q }
-  bump <- function(Q) { e <- max(abs(crossprod(Q) - Ip)); if (e > stiefel_max) stiefel_max <<- e }
-
-  Q <- Q_obs
-  if (J < M) for (jj in (J + 1L):M) { Q <- kern(Q); path_u[jj + 1L] <- uval(Q); bump(Q) }
-  Q <- Q_obs
-  if (J > 0L) for (jj in (J - 1L):0L) { Q <- kern(Q); path_u[jj + 1L] <- uval(Q); bump(Q) }
-
-  if (stiefel_max > 1e-6)
-    stop(sprintf("GUARD FAILED: path point off Stiefel, max|Q'Q-I| = %.3e", stiefel_max))
-
-  n_gt <- sum(path_u >  u_obs); n_eq <- sum(path_u == u_obs); n_ge <- sum(path_u >= u_obs)
-  U <- if (isTRUE(randomized)) stats::runif(1L) else 1
-  p_bc   <- (n_gt + U * n_eq) / (M + 1L)
-  p_cons <- n_ge / (M + 1L)
-  T_obs  <- hotelling_T2(X, cl_obs, k1, k2, ridge)
-
-  if (verbose)
-    cat(sprintf("[hclust har-analytic] n=%d p=%d M=%d L=%d method=%s  J=%d p=%.4f\n",
-                nrow(X), ncol(X), M, L, hclust_method, J, p_bc))
-
-  out <- list(
-    pval = p_bc, se = sqrt(p_bc * (1 - p_bc) / (M + 1L)), T_obs = T_obs,
-    draws = path_u, acc = NA_real_, n_unique_draws = length(unique(path_u)),
-    k1 = k1, k2 = k2, K = length(unique(cl_obs)),
-    condition_on = "pair-preserved", sampler = "har-analytic",
     p_cons = p_cons, M = M, L = L, u_obs = u_obs, path_u = path_u, J = J,
     stiefel_max = stiefel_max
   )

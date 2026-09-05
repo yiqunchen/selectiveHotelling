@@ -10,10 +10,14 @@
 #'
 #' Two clustering routes are supported via `clustering`:
 #' \itemize{
-#'   \item `"kmeans"` (default): clusters with k-means (via [kmeans_fun()]) and
-#'     obtains the null distribution of \eqn{T^2} by MCMC sampling of the polar
-#'     factor `Q` *within the k-means selection region*. The MCMC controls
-#'     (`sampler`, `condition_on`, `burn`, `B`, `thin`, `eps`) apply here.
+#'   \item `"kmeans"` (default): clusters with k-means (via [kmeans_fun()]) and,
+#'     with the default `sampler = "analytic"`, runs the **exact** closed-form
+#'     analytic-arc hit-and-run test [selective_hotelling_har()] (Besag--Clifford
+#'     wrapper, `M`/`L` controls, conditioning on the fixed-init Lloyd
+#'     trajectory). The remaining `sampler` values select the demoted MCMC
+#'     samplers, which draw the polar factor `Q` *within the k-means selection
+#'     region*; the MCMC controls (`condition_on`, `burn`, `B`, `thin`, `eps`)
+#'     apply only to those.
 #'   \item `"hclust"`: clusters with deterministic agglomerative hierarchical
 #'     clustering (via [hclust_fun()]) and routes through the preferred,
 #'     **exact** algorithm-agnostic Besag-Clifford engine
@@ -28,16 +32,19 @@
 #' @param clustering Clustering route: `"kmeans"` (default, MCMC sampler) or
 #'   `"hclust"` (hierarchical clustering through the exact Besag-Clifford
 #'   engine).
-#' @param condition_on Selection-event definition for `clustering = "kmeans"`.
-#'   `"final"` (default, **validated/supported**) conditions only on the final
-#'   cluster assignments of the selected pair. `"trajectory"`
+#' @param condition_on Selection-event definition for the **MCMC** k-means
+#'   samplers only. `"final"` (default, **validated/supported**) conditions only
+#'   on the final cluster assignments of the selected pair. `"trajectory"`
 #'   (**EXPERIMENTAL**) conditions on all intermediate k-means assignments; its
 #'   feasible region is much tighter and the local Cayley walk under-mixes
-#'   there, so it is not recommended for inference. Ignored for
-#'   `clustering = "hclust"`.
-#' @param sampler MCMC sampler to use when `clustering = "kmeans"`: `"fast"`
-#'   (default, fast Cayley random walk with exact fixed-init feasibility
-#'   checks), `"har"` (two-row geodesic hit-and-run / slice), or `"cayley"`
+#'   there, so it is not recommended for inference. Ignored by
+#'   `sampler = "analytic"` (which always conditions on the Lloyd trajectory,
+#'   where its arc moves are exact) and by `clustering = "hclust"`.
+#' @param sampler Engine to use when `clustering = "kmeans"`: `"analytic"`
+#'   (default, **exact** closed-form analytic-arc hit-and-run,
+#'   [selective_hotelling_har()]), or one of the demoted black-box MCMC
+#'   samplers `"fast"` (Cayley random walk with exact fixed-init feasibility
+#'   checks), `"har"` (legacy bisection hit-and-run / slice), `"cayley"`
 #'   (re-clustering Cayley random walk). Ignored for `clustering = "hclust"`.
 #' @param burn Burn-in iterations (k-means/MCMC route only; ignored for
 #'   `clustering = "hclust"`).
@@ -54,10 +61,12 @@
 #' @param hclust_square If `TRUE` (default) the hierarchical clustering tree is
 #'   built on squared Euclidean distances (the `clusterpval` convention); see
 #'   [hclust_fun()]. Ignored for `clustering = "kmeans"`.
-#' @param M Besag-Clifford path length for `clustering = "hclust"` (the path
-#'   carries `M + 1` marks). Ignored for `clustering = "kmeans"`.
-#' @param L Number of Besag-Clifford kernel steps per path edge for
-#'   `clustering = "hclust"`. Ignored for `clustering = "kmeans"`.
+#' @param M Besag-Clifford path length (the path carries `M + 1` marks). Used by
+#'   `clustering = "hclust"` and by `sampler = "analytic"`; ignored by the MCMC
+#'   k-means samplers.
+#' @param L Number of Besag-Clifford kernel steps per path edge. Used by
+#'   `clustering = "hclust"` and by `sampler = "analytic"`; ignored by the MCMC
+#'   k-means samplers.
 #' @param ridge Ridge added to the pooled covariance in [hotelling_T2()].
 #' @param show_progress Whether to display an MCMC progress bar (requires the
 #'   `progress` package; k-means/MCMC route only).
@@ -66,19 +75,26 @@
 #' @return An S3 object of class `"selectiveHotelling"`: a list with elements
 #'   `pval` (selective p-value), `se` (Monte Carlo standard error), `T_obs`
 #'   (observed \eqn{T^2}), `draws` (sampled \eqn{T^2} or path statistic values),
-#'   `acc` (acceptance / move rate, `NA` for `"har"`), `n_unique_draws`, `k1`,
-#'   `k2`, `K`, `condition_on`, and `sampler` (`"fast"`/`"har"`/`"cayley"` for
-#'   k-means, or `"besag-clifford"` for `clustering = "hclust"`).
+#'   `acc` (acceptance / move rate, `NA` for the rejection-free engines),
+#'   `n_unique_draws`, `k1`, `k2`, `K`, `condition_on`, and `sampler`
+#'   (`"har-analytic"` for the default k-means route, `"fast"`/`"har"`/`"cayley"`
+#'   for the MCMC ones, or `"besag-clifford"` for `clustering = "hclust"`).
 #'
 #' @examples
 #' set.seed(1)
 #' X <- generate_exchangeable_null_data(30, 2, rho = 0.1)$dat
-#' res <- selective_hotelling_test(
+#'
+#' # Default k-means route: exact analytic-arc hit-and-run.
+#' res <- selective_hotelling_test(X, 1, 2, K = 3, M = 100)
+#' res$pval
+#' print(res)
+#'
+#' # Demoted MCMC sampler, kept for comparison.
+#' res_mcmc <- selective_hotelling_test(
 #'   X, 1, 2, K = 3, sampler = "fast",
 #'   burn = 200, B = 400, thin = 2
 #' )
-#' res$pval
-#' print(res)
+#' res_mcmc$pval
 #'
 #' # Hierarchical clustering routed through the exact Besag-Clifford engine.
 #' # Three separated blobs so hclust recovers three sizeable clusters.
