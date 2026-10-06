@@ -2,23 +2,27 @@
 % Please edit documentation in R/truncated_f.R
 \name{selective_truncated_F}
 \alias{selective_truncated_F}
-\title{Closed-form one-dimensional truncated-F selective Hotelling test (unknown covariance)}
+\title{One-dimensional selective Hotelling test (unknown covariance)}
 \usage{
 selective_truncated_F(
   X,
   k1,
   k2,
   clustering = c("kmeans", "hclust", "custom"),
-  method = c("exact", "grid"),
+  method = c("bc", "exact", "is"),
   K = 3L,
   init_centers_idx = NULL,
   hclust_method = "average",
   hclust_square = TRUE,
-  hclust_event = c("pair", "trace"),
+  hclust_event = "trace",
   cl_fun = NULL,
   cl_obs = NULL,
-  n_grid = 400L,
-  boundary_tol = 1e-06,
+  M = 5000L,
+  L = 2L,
+  onedim_kernel = c("givens", "slice"),
+  n_is = 2000L,
+  is_mix = 0.5,
+  is_scale = NULL,
   ridge = 1e-08,
   verbose = FALSE
 )
@@ -27,117 +31,81 @@ selective_truncated_F(
 \item{X}{A numeric \eqn{n \times p} data matrix with observations in rows.}
 
 \item{k1, k2}{The two tested cluster labels. Each cluster must have at least
-three members, and the pair size must exceed the dimension
-(\eqn{r - 1 > p}) for a truncated F to exist.}
+three members, and \eqn{r - 1 > p}.}
 
-\item{clustering}{One of \code{"kmeans"}, \code{"hclust"}, or \code{"custom"} (use \code{cl_fun}).}
+\item{clustering}{\code{"kmeans"}, \code{"hclust"}, or \code{"custom"} (use \code{cl_fun}).}
 
-\item{method}{\code{"exact"} (closed-form arc; default) or \code{"grid"} (dense grid +
-bisection on the black-box pair-preserved predicate). \code{"custom"} always uses
-the grid engine.}
+\item{method}{\code{"bc"} (default), \code{"exact"} (closed form; \code{"kmeans"} and \code{"hclust"}
+only), or \code{"is"}.}
 
-\item{K}{Number of clusters (for the built-in \code{"kmeans"}/\code{"hclust"} routines).}
+\item{K}{Number of clusters (built-in \code{"kmeans"}/\code{"hclust"}).}
 
-\item{init_centers_idx}{Fixed initial-centre row indices for the \code{"kmeans"}
-route (conditions on that exact fixed-init run); drawn via \code{\link[=kmeans_fun]{kmeans_fun()}} if
-\code{NULL}.}
+\item{init_centers_idx}{Fixed initial-centre row indices for \code{"kmeans"}; drawn via
+\code{\link[=kmeans_fun]{kmeans_fun()}} if \code{NULL}.}
 
-\item{hclust_method, hclust_square}{Agglomeration method and squared-distance
-flag for the \code{"hclust"} route (defaults match \code{\link[=hclust_fun]{hclust_fun()}}). The exact
-closed-form arc engine is derived for \strong{average} linkage on squared
-distances; for any other linkage the \code{"exact"} route automatically falls
-back to the linkage-correct \code{"grid"} engine (single/complete linkage make
-each merge criterion a min/max envelope of harmonics, and
-Ward/centroid/median/McQuitty use different Lance-Williams weights, so the
-single-harmonic reduction does not apply as-is).}
+\item{hclust_method, hclust_square}{Linkage and squared-distance flag for \code{"hclust"}
+(defaults match \code{\link[=hclust_fun]{hclust_fun()}}).}
 
-\item{hclust_event}{Which hierarchical selection event to condition on for the
-\code{"hclust"} \code{"exact"} route. \code{"pair"} (default) is the cutree-K
-pair-preservation event, computed by an event-driven cell march with a
-\code{max_cells} budget (a capped march yields \code{pval = NA}). \code{"trace"} conditions
-on the observed merge trace -- the identical first \eqn{n-K} merges -- as a
-one-shot conjunction of \eqn{O(n^2)} constraints, so it has no cell budget
-and cannot cap; it is \strong{strictly stronger} conditioning, and is derived for
-\strong{average linkage only}. Relative power of the two events is unmeasured.}
+\item{hclust_event}{Kept for compatibility; the only value is \code{"trace"}, the merge
+order used by \code{method = "exact"}.}
 
-\item{cl_fun}{A black-box clustering routine \verb{function(Xmat) -> labels} for
-\code{clustering = "custom"} (must be a pure function of its data). Also used as
-the predicate for \code{method = "grid"}.}
+\item{cl_fun}{A clustering routine \verb{function(Xmat) -> labels} (a pure function of
+its data) for \code{clustering = "custom"}; optional otherwise.}
 
 \item{cl_obs}{Optional precomputed observed clustering (saves one call).}
 
-\item{n_grid, boundary_tol}{Grid size and bisection tolerance for the grid
-engine.}
+\item{M, L}{Path length and number of kernel steps between path points for
+\code{method = "bc"}.}
+
+\item{onedim_kernel}{For \code{method = "bc"}: \code{"givens"} (default; random step on the
+angle, step size drawn log-uniformly on \verb{[1e-3, 1]} per block of \code{L} steps) or
+\code{"slice"} (slice sampling with shrinkage).}
+
+\item{n_is, is_mix, is_scale}{Number of draws, weight of the null law in the
+defensive mixture, and the standard deviation of its normal part, for
+\code{method = "is"}.}
 
 \item{ridge}{Small non-negative ridge for the reported observed \eqn{T^2}.}
 
 \item{verbose}{If \code{TRUE}, print a one-line diagnostic.}
 }
 \value{
-An S3 object of class \code{"selectiveHotelling"} with primary fields
-\code{pval} (closed-form truncated-F selective p-value), \code{T_obs}, \code{k1}, \code{k2},
-\code{K}, \code{condition_on} (\code{"kmeans-trajectory"} or \code{"pair-preserved"}), and
-\code{sampler} (\code{"truncated-F"}). Additional fields: \code{p_uncond} (the
-classical, selection-ignoring F p-value), \code{theta_obs}, \code{F_obs}, \code{df1}
-(\eqn{= p}), \code{df2} (\eqn{= r-p-1}), \code{intervals} (feasible \eqn{\theta}-arcs),
-\code{denom_mass}, \code{se} (\code{NA}; exact, not Monte Carlo), and \code{n_intervals}.
+An S3 object of class \code{"selectiveHotelling"} with \code{pval}, \code{T_obs}, \code{k1},
+\code{k2}, \code{K}, \code{condition_on}, \code{sampler}, \code{p_uncond} (the classical F p-value),
+\code{theta_obs}, \code{F_obs}, \code{df1}, \code{df2}, and, for \code{method = "exact"}, the feasible
+arcs \code{intervals}.
 }
 \description{
-An \strong{exact, Monte-Carlo-free} selective test of equality of the means of a
-discovered cluster pair \verb{(k1, k2)}, with the covariance \eqn{\Sigma} treated as
-\strong{unknown}. It is the strong-conditioning, closed-form companion of
-\code{\link[=selective_hotelling_bc]{selective_hotelling_bc()}}: instead of a Besag-Clifford Stiefel path it
-conditions additionally on every angular nuisance coordinate of the polar
-factor \eqn{Q} except the single Hotelling angle \eqn{\theta}, whose law is
-then a 1-D truncated F.
+The one-dimensional test \eqn{p_{\mathrm{polar,1d}}} of the paper: it conditions on
+every coordinate of the polar factor \eqn{Q} except the Hotelling angle
+\eqn{\theta}, so that the selective null law of \eqn{\theta} is a truncated Beta
+(equivalently, a truncated F for the scaled \eqn{T^2}).
 }
 \details{
-Reduce the tested pair via the polar decomposition
-\eqn{X_{sub} = X_{fixed} + A Q S^{1/2}} (see \code{\link[=prepare_pair_objects]{prepare_pair_objects()}}). With
-\eqn{a} the unit two-sample-contrast direction, \eqn{\cos^2\theta = \|Q'a\|^2},
-the two-sample Hotelling statistic is \eqn{T^2 = (r-2)\cot^2\theta} and
-\eqn{F = \tfrac{r-p-1}{p}\cot^2\theta \sim F_{p,\,r-p-1}} unconditionally,
-while under the null \eqn{\cos^2\theta \sim \mathrm{Beta}(p/2, (r-1-p)/2)}
-independently of the other angular coordinates of \eqn{Q} (\eqn{r = n_1 + n_2}
-is the pair size). Holding those coordinates fixed, \eqn{Q(\theta)} traces a
-geodesic on which the reconstructed data \eqn{X(\theta)} is a harmonic curve,
-so the clustering-preservation event restricts \eqn{\theta} to a feasible set
-\eqn{I_E \subseteq [0,\pi/2]} that is computed \strong{in closed form} for k-means
-and hierarchical clustering (and by grid+bisection for an arbitrary \code{cl_fun}).
-Since \eqn{T^2 \ge T^2_{obs} \iff \theta \le \theta_{obs}}, the selective
-p-value is the truncated-Beta ratio
-\deqn{p = \frac{\mathrm{mass}\{\theta \in I_E,\ \theta \le \theta_{obs}\}}{\mathrm{mass}\{\theta \in I_E\}}.}
-No sampling, no burn-in, no mixing assumption.
+With \eqn{\cos^2\theta = u(Q)}, \eqn{T^2 = (r-2)\cot^2\theta}, and under the null
+\eqn{\cos^2\theta \sim \mathrm{Beta}(p/2, (r-1-p)/2)} independently of the other
+coordinates of \eqn{Q}. Given those coordinates, the clustering restricts
+\eqn{\theta} to a set \eqn{S_\theta}, and the p-value is the Beta mass of
+\eqn{S_\theta \cap (0, \theta_{obs}]} divided by the Beta mass of \eqn{S_\theta}.
 
-\strong{Conditioning events.} \code{clustering = "kmeans"} conditions on the fixed-init
-Lloyd \strong{trajectory} \eqn{E_\tau} (the k-means selection event). For
-\code{"hclust"} the event is chosen by \code{hclust_event}: \code{"pair"} (default) is the
-\strong{cutree-K partition preserving the pair} -- the same event
-\code{\link[=selective_hotelling_bc]{selective_hotelling_bc()}} and Gao et al. use -- while \code{"trace"} is the
-\strong{observed merge trace} (identical first \eqn{n-K} merges), a strictly
-stronger event whose feasible set is one component of the \code{"pair"} set. The
-relative power of the two hierarchical events is \strong{unmeasured}. All
-closed-form feasible sets are verified against brute-force re-clustering.
-
-\strong{What conditioning buys and costs.} Fixing the contrast \emph{direction} makes the
-p-value a pivot free of \eqn{\Sigma}, so on this fiber knowing \eqn{\Sigma}
-cannot improve the test; the price is power (the high-dimensional
-\code{\link[=selective_hotelling_bc]{selective_hotelling_bc()}} keeps directional freedom and can be lifted by a
-known \eqn{\Sigma}). In exchange this test is exact, closed-form, and needs no
-path-length or step-size tuning.
+\code{method = "bc"} (default) computes it for any clustering, on the event that the
+clustering returns the tested pair, with the Besag--Clifford construction on the
+angle (Algorithm 2 of the paper); it is exact for any \code{M}. \code{method = "exact"}
+gives a closed form, with no Monte Carlo, for two stronger events: the whole
+Lloyd trajectory (\code{clustering = "kmeans"}) and the merge order up to the cut
+(\code{clustering = "hclust"}, average or single linkage). These events condition on
+more and cost power. \code{method = "is"} uses importance sampling (consistent, not
+exact).
 }
 \examples{
 set.seed(1)
-X <- matrix(rnorm(30 * 3), 30, 3)
-# exact hierarchical-clustering route:
-cl <- hclust_fun(X, k = 3)$cluster
-big <- as.integer(names(table(cl))[table(cl) >= 3])
-res <- selective_truncated_F(X, big[1], big[2], clustering = "hclust", K = 3)
+X <- rbind(matrix(rnorm(40), 20, 2), matrix(rnorm(40) + 5, 20, 2),
+           matrix(rnorm(40) - 5, 20, 2))
+cl_fun <- function(x) hclust_fun(x, k = 3)$cluster
+res <- selective_truncated_F(X, 1, 2, clustering = "custom", cl_fun = cl_fun, M = 200)
 res$pval
-print(res)
 
 }
 \seealso{
-\code{\link[=selective_hotelling_bc]{selective_hotelling_bc()}}, \code{\link[=selective_hotelling_test]{selective_hotelling_test()}},
-\code{\link[=hotelling_T2]{hotelling_T2()}}
+\code{\link[=selective_hotelling_bc]{selective_hotelling_bc()}}, \code{\link[=selective_hotelling_test]{selective_hotelling_test()}}, \code{\link[=hotelling_T2]{hotelling_T2()}}
 }

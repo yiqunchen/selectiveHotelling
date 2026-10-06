@@ -71,73 +71,47 @@ cayley_left_step <- function(Q, eps) {
   U %*% Q
 }
 
-#' Calibrate the Cayley step size for a minimum acceptance rate
+# ---- givens_left (moved from samplers.R on 2026-10-05; used by the Besag-Clifford kernels) ----
+#' Givens rotation acting on two rows of Q
 #'
-#' Repeatedly probes the feasibility of Cayley proposals from `Q` and shrinks
-#' `eps` until the empirical pilot acceptance rate reaches `lower` (or `eps`
-#' hits `min_eps`).
+#' Applies a Givens rotation of angle `theta` to rows `i` and `j` of `Q` (a left
+#' action on those two rows), used by the geodesic hit-and-run / slice samplers.
 #'
-#' @param Q Current Stiefel point.
-#' @param eps Initial step size.
-#' @param feasible_Q A predicate returning `TRUE` if a proposed `Q` is feasible.
-#' @param n_probe Number of proposals per calibration round.
-#' @param lower Target minimum acceptance rate.
-#' @param shrink Multiplicative shrink factor for `eps`.
-#' @param min_eps Lower bound on `eps`.
-#' @param max_rounds Maximum number of calibration rounds.
+#' @param Q An `r` by `p` matrix with orthonormal columns.
+#' @param i,j Row indices to rotate.
+#' @param theta Rotation angle.
 #'
-#' @return A list with elements `eps` (calibrated step) and `pilot_acceptance`.
+#' @return The rotated matrix.
 #'
 #' @keywords internal
-calibrate_cayley_eps <- function(Q, eps, feasible_Q,
-                                 n_probe = 80, lower = 0.05,
-                                 shrink = 0.25, min_eps = 1e-8,
-                                 max_rounds = 12) {
-  eps <- max(eps, min_eps)
-  last_rate <- NA_real_
-
-  for (round in seq_len(max_rounds)) {
-    accepted <- 0L
-    for (probe in seq_len(n_probe)) {
-      accepted <- accepted + isTRUE(feasible_Q(cayley_left_step(Q, eps)))
-    }
-    last_rate <- accepted / n_probe
-    if (last_rate >= lower || eps <= min_eps) break
-    eps <- max(eps * shrink, min_eps)
-  }
-
-  list(eps = eps, pilot_acceptance = last_rate)
+givens_left <- function(Q, i, j, theta) {
+  Qi <- Q[i, , drop = FALSE]
+  Qj <- Q[j, , drop = FALSE]
+  cth <- cos(theta); sth <- sin(theta)
+  Q[i, ] <-  cth * Qi + (-sth) * Qj
+  Q[j, ] <-  sth * Qi +  cth  * Qj
+  Q
 }
 
-#' Adapt the Cayley step size toward a target acceptance rate
-#'
-#' Multiplicatively rescales `eps` based on a windowed acceptance rate so that
-#' the chain moves toward the `target` acceptance rate, clamped to
-#' `[min_eps, max_eps]`.
-#'
-#' @param eps Current step size.
-#' @param window_rate Observed acceptance rate over the recent window.
-#' @param target Target acceptance rate.
-#' @param min_eps,max_eps Bounds on the returned step size.
-#'
-#' @return The adapted step size.
-#'
+
+# ---- .har_givens_PUW (moved from har.R on 2026-10-05; used by sim/path_bc_hclust.R) ----
+# -----------------------------------------------------------------------------
+# .har_givens_PUW(X_of_Q, X_fixed, Q, i, j): decompose the reconstructed data
+# X(theta) = X_of_Q(givens_left(Q, i, j, theta)) as the harmonic curve
+#     X(theta) = P + cos theta * U + sin theta * W .
+# givens_left(Q,i,j,theta): row i = cos*Q[i] - sin*Q[j]; row j = sin*Q[i] + cos*Q[j].
+# Hence Q(theta) = Qc + cos theta * Mcos + sin theta * Msin with
+#   Mcos: rows i,j = Q[i,], Q[j,]  ;  Msin: row i = -Q[j,], row j = Q[i,]  ;
+#   Qc  : Q with rows i,j zeroed.
+# Feeds the package-native (global-free) .geodesic_PUW.
+# -----------------------------------------------------------------------------
 #' @keywords internal
-adapt_cayley_eps <- function(eps, window_rate, target = 0.4,
-                             min_eps = 1e-8, max_eps = 0.5) {
-  if (!is.finite(window_rate)) return(eps)
-
-  factor <- if (window_rate == 0) {
-    0.20
-  } else if (window_rate < 0.05) {
-    0.35
-  } else if (window_rate < target / 2) {
-    0.70
-  } else if (window_rate > 0.80) {
-    1.25
-  } else {
-    exp(0.5 * (window_rate - target))
-  }
-
-  max(min(eps * factor, max_eps), min_eps)
+#' @noRd
+.har_givens_PUW <- function(X_of_Q, X_fixed, Q, i, j) {
+  rq <- nrow(Q); p <- ncol(Q)
+  Mcos <- matrix(0, rq, p); Mcos[i, ] <- Q[i, ]; Mcos[j, ] <- Q[j, ]
+  Msin <- matrix(0, rq, p); Msin[i, ] <- -Q[j, ]; Msin[j, ] <- Q[i, ]
+  Qc <- Q; Qc[i, ] <- 0; Qc[j, ] <- 0
+  .geodesic_PUW(X_of_Q, X_fixed, Qc, Mcos, Msin)
 }
+

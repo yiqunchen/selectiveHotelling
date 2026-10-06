@@ -224,27 +224,6 @@ selective_hotelling_mcmc <- function(X, cl_fun, k1, k2,
 # ---------- Two-row geodesic Hit-and-Run / Slice extensions ----------------
 # Updated to support both trajectory and final-only conditioning
 
-#' Givens rotation acting on two rows of Q
-#'
-#' Applies a Givens rotation of angle `theta` to rows `i` and `j` of `Q` (a left
-#' action on those two rows), used by the geodesic hit-and-run / slice samplers.
-#'
-#' @param Q An `r` by `p` matrix with orthonormal columns.
-#' @param i,j Row indices to rotate.
-#' @param theta Rotation angle.
-#'
-#' @return The rotated matrix.
-#'
-#' @keywords internal
-givens_left <- function(Q, i, j, theta) {
-  Qi <- Q[i, , drop = FALSE]
-  Qj <- Q[j, , drop = FALSE]
-  cth <- cos(theta); sth <- sin(theta)
-  Q[i, ] <-  cth * Qi + (-sth) * Qj
-  Q[j, ] <-  sth * Qi +  cth  * Qj
-  Q
-}
-
 #' Feasibility of a Givens-rotated point along a geodesic
 #'
 #' Rotates `Q0` by `theta` in the `(i, j)` plane, reconstructs the data, and

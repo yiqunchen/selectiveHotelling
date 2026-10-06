@@ -33,26 +33,6 @@
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# .har_givens_PUW(X_of_Q, X_fixed, Q, i, j): decompose the reconstructed data
-# X(theta) = X_of_Q(givens_left(Q, i, j, theta)) as the harmonic curve
-#     X(theta) = P + cos theta * U + sin theta * W .
-# givens_left(Q,i,j,theta): row i = cos*Q[i] - sin*Q[j]; row j = sin*Q[i] + cos*Q[j].
-# Hence Q(theta) = Qc + cos theta * Mcos + sin theta * Msin with
-#   Mcos: rows i,j = Q[i,], Q[j,]  ;  Msin: row i = -Q[j,], row j = Q[i,]  ;
-#   Qc  : Q with rows i,j zeroed.
-# Feeds the package-native (global-free) .geodesic_PUW.
-# -----------------------------------------------------------------------------
-#' @keywords internal
-#' @noRd
-.har_givens_PUW <- function(X_of_Q, X_fixed, Q, i, j) {
-  rq <- nrow(Q); p <- ncol(Q)
-  Mcos <- matrix(0, rq, p); Mcos[i, ] <- Q[i, ]; Mcos[j, ] <- Q[j, ]
-  Msin <- matrix(0, rq, p); Msin[i, ] <- -Q[j, ]; Msin[j, ] <- Q[i, ]
-  Qc <- Q; Qc[i, ] <- 0; Qc[j, ] <- 0
-  .geodesic_PUW(X_of_Q, X_fixed, Qc, Mcos, Msin)
-}
-
-# -----------------------------------------------------------------------------
 # .har_step(Q, ...): ONE analytic-arc hit-and-run step. Pick two random rows
 # (i, j), build the closed-form feasible arcs of E_tau on that Givens geodesic,
 # and draw theta ~ Uniform-by-arc-length over the union. theta = 0 (the current
@@ -146,7 +126,7 @@
 #'   [selective_truncated_F()]
 #' @export
 selective_hotelling_har <- function(X, k1, k2, K = 3L, init_centers_idx = NULL,
-                                    M = 300L, L = 2L, randomized = TRUE,
+                                    M = 5000L, L = 2L, randomized = TRUE,
                                     ridge = 1e-8, verbose = FALSE) {
   stopifnot(is.matrix(X), M >= 1L, L >= 1L)
   M <- as.integer(M); L <- as.integer(L)

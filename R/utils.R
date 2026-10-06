@@ -60,64 +60,6 @@ hotelling_T2 <- function(X, cl, k1, k2, ridge = 1e-8) {
   as.numeric((n1 * n2)/(n1 + n2) * t(d) %*% solve(Sp, d))
 }
 
-#' Hotelling T-squared on the selection-mapped cluster pair
-#'
-#' Resolves the (possibly relabeled) clusters that correspond to the originally
-#' selected pair `(k1, k2)` via [selected_pair_labels()] and then evaluates
-#' [hotelling_T2()] on those labels.
-#'
-#' @param X A numeric data matrix with observations in rows.
-#' @param cl0 The original cluster assignment vector.
-#' @param cl1 The new cluster assignment vector (possibly relabeled).
-#' @param k1,k2 The originally selected cluster labels (in `cl0`).
-#' @param ridge Ridge passed to [hotelling_T2()].
-#'
-#' @return The \eqn{T^2} value for the mapped pair, or `NA_real_` if the pair is
-#'   not preserved.
-#'
-#' @keywords internal
-hotelling_T2_selected <- function(X, cl0, cl1, k1, k2, ridge = 1e-8) {
-  labels <- selected_pair_labels(cl0, cl1, k1, k2)
-  if (is.null(labels)) return(NA_real_)
-  hotelling_T2(X, cl1, labels[["k1"]], labels[["k2"]], ridge)
-}
-
-#' Monte Carlo upper-tail p-value with batched standard error
-#'
-#' Computes the Monte Carlo upper-tail p-value \eqn{(1 + \#\{draws \ge
-#' T_{obs}\})/(n + 1)} from a vector of sampled statistics, together with a
-#' batched-means standard error estimate.
-#'
-#' @param draws Numeric vector of sampled \eqn{T^2} values (may contain `NA`).
-#' @param T_obs The observed \eqn{T^2} value.
-#'
-#' @return A list with elements `pval`, `se`, and `n` (the number of finite
-#'   draws used).
-#'
-#' @keywords internal
-mc_tail_pvalue <- function(draws, T_obs) {
-  ok <- is.finite(draws)
-  n_ok <- sum(ok)
-  if (n_ok == 0L || !is.finite(T_obs)) return(list(pval = NA_real_, se = NA_real_, n = n_ok))
-
-  exceed <- draws[ok] >= T_obs
-  pval <- (1 + sum(exceed)) / (n_ok + 1)
-
-  nb <- max(10L, floor(n_ok / 50))
-  bsz <- floor(n_ok / nb)
-  se <- NA_real_
-  if (bsz >= 1) {
-    bm <- sapply(seq_len(nb), function(j) {
-      st <- (j - 1) * bsz + 1
-      en <- j * bsz
-      (1 + sum(exceed[st:en])) / (bsz + 1)
-    })
-    se <- stats::sd(bm) / sqrt(nb)
-  }
-
-  list(pval = pval, se = se, n = n_ok)
-}
-
 #' Generate exchangeable (equicorrelated) Gaussian null data
 #'
 #' Draws an `n` by `p` matrix of multivariate Gaussian observations with a

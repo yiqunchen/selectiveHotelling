@@ -9,17 +9,19 @@ selective_hotelling_bc(
   cl_fun,
   k1,
   k2,
-  M = 300L,
+  M = 5000L,
   L = 2L,
-  eps = NULL,
+  eps = "mixture",
   randomized = TRUE,
-  calibrate = TRUE,
+  eps_range = c(0.001, 1),
   cl_obs = NULL,
   ridge = 1e-08,
   stiefel_tol = 1e-08,
   guard_feas_checks = 25L,
   oracle_Sigma = NULL,
-  verbose = FALSE
+  verbose = FALSE,
+  kernel = c("givens", "cayley", "givens_slice"),
+  slice_max_props = 200L
 )
 }
 \arguments{
@@ -42,16 +44,16 @@ Each cluster must have at least three members for a Hotelling \eqn{T^2}.}
 \item{L}{Number of kernel steps per path edge (i.e. \eqn{K^L}). Larger \code{L}
 improves spread/mixing and hence power.}
 
-\item{eps}{Cayley step size. If \code{NULL} and \code{calibrate = TRUE} it is
-auto-tuned toward a workable acceptance rate; if \code{NULL} and
-\code{calibrate = FALSE} it defaults to \code{0.3}.}
+\item{eps}{\code{"mixture"} (default) draws a step size independently for each
+path edge from the fixed log-uniform \code{eps_range}. A positive numeric value
+uses a fixed step size, and \code{NULL} uses \code{0.3}. The step size is never tuned
+on the observed point, because that can break exactness.}
 
 \item{randomized}{If \code{TRUE} (default) returns the randomized upper-tail rank
 p-value, which is exactly \eqn{\mathrm{Uniform}(0,1)} under \eqn{H_0}; if
 \code{FALSE}, ties are broken conservatively.}
 
-\item{calibrate}{If \code{TRUE} (default) and \code{eps} is \code{NULL}, auto-tune the
-Cayley step size for a workable acceptance rate.}
+\item{eps_range}{Bounds of the fixed log-uniform step-size mixture.}
 
 \item{cl_obs}{Optional precomputed \code{cl_fun(X)} (saves one call); otherwise it
 is computed internally.}
@@ -72,6 +74,34 @@ same path by ranking the Mahalanobis statistic
 \code{p_oracle}. Validity is identical; only the statistic (hence power) differs.}
 
 \item{verbose}{If \code{TRUE}, print a one-block diagnostic.}
+
+\item{kernel}{Proposal of the Metropolis kernel. \code{"givens"} (default; the
+random Givens kernel of the paper) picks two rows \eqn{i < j} of \eqn{Q} uniformly at random and
+proposes \eqn{Q' = G_{ij}(\omega) Q}, a rotation by angle
+\eqn{\omega \sim N(0, (\pi\,\mathrm{eps})^2)} in that coordinate plane
+(see \code{givens_left()}). Both proposals are symmetric and preserve the
+uniform law on the Stiefel manifold, so both kernels are reversible
+w.r.t. \eqn{\mathrm{Uniform}(E)} and the p-value is exact for either;
+they differ only in mixing, hence power. \code{"cayley"} proposes
+\eqn{Q' = UQ} with \eqn{U} a random Cayley rotation of step \code{eps}, which
+moves every row of \eqn{Q} at once. \code{eps}, \code{eps_range} and the \code{"mixture"}
+rule apply to both.
+\code{"givens_slice"} is the shrinking-bracket Givens move (the shrinkage step
+of elliptical slice sampling; Neal 2003; Murray, Adams and MacKay 2010):
+it picks rows \eqn{i < j} uniformly, draws
+\eqn{\omega_0 \sim \mathrm{Uniform}(0, 2\pi)}, sets the bracket
+\eqn{[\omega_0 - 2\pi, \omega_0]} (which contains the current point
+\eqn{\omega = 0}), proposes \eqn{\omega = \omega_0} and, while the
+proposal is infeasible, shrinks the bracket toward 0 and redraws
+\eqn{\omega} uniformly in it. It is reversible w.r.t.
+\eqn{\mathrm{Uniform}(E)}, needs no step size (\code{eps} and \code{eps_range}
+are ignored) and nearly always moves, at the price of several
+\code{cl_fun} calls per step (see \code{n_path_calls}).}
+
+\item{slice_max_props}{For \code{kernel = "givens_slice"}: maximum number of
+proposals (calls of \code{cl_fun}) in one shrinking-bracket step; if all fail the
+chain stays put. The cap is symmetric in the two directions of a move, so
+the kernel stays reversible and the p-value exact.}
 }
 \value{
 An S3 object of class \code{"selectiveHotelling"}: a list whose primary
@@ -83,7 +113,11 @@ used for ranking), \code{acc} (kernel move fraction), \code{n_unique_draws}, \co
 \code{condition_on} (\code{"pair-preserved"}), and \code{sampler} (\code{"besag-clifford"}).
 Additional diagnostic fields are also returned: \code{p_cons} (conservative
 tie-broken p-value), \code{p_oracle}, \code{M}, \code{L}, \code{eps}, \code{u_obs}, \code{path_u}, \code{J},
-\code{move_frac}, \code{stiefel_max}, \code{feas_ok}, and \code{n_feasible_path}.
+\code{move_frac}, \code{stiefel_max}, \code{feas_ok}, \code{n_feasible_path}, \code{kernel},
+\code{n_path_calls} (calls of \code{cl_fun} made by the kernel along the path, the
+compute measure for comparing kernels) and \code{n_cluster_calls} (all calls of
+\code{cl_fun} made by this function, including the observed clustering when
+\code{cl_obs} is not supplied, step-size calibration and the guards).
 }
 \description{
 A Monte Carlo selective test of equality of the means of a discovered cluster

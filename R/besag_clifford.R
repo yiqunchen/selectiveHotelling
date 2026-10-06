@@ -26,6 +26,25 @@
 #         accept Q' iff feasible(Q') := cl_fun(X(Q')) preserves (k1,k2),
 #         otherwise stay at Q.
 #
+#     kernel = "givens" swaps the proposal for a single random Givens rotation
+#     U = G_ij(w): rows i < j of Q drawn uniformly, angle w ~ N(0, (eps*pi)^2).
+#     It is symmetric for the same reason (G_ij(w)^{-1} = G_ij(-w), and w, -w
+#     are equally likely; the plane is drawn independently of Q), so the
+#     accept-if-feasible kernel is again reversible w.r.t. Uniform(E).
+#
+#     kernel = "givens_slice" is the SHRINKING-BRACKET Givens move (the
+#     shrinkage step of elliptical slice sampling; Neal 2003, Murray, Adams and
+#     MacKay 2010) on the circle {G_ij(w) Q : w in [0, 2 pi)}: rows i < j drawn
+#     uniformly; w0 ~ Uniform(0, 2 pi); bracket [w0 - 2 pi, w0] (it contains the
+#     current point w = 0); propose w = w0; if feasible accept, otherwise shrink
+#     the bracket toward 0 (w < 0: lo <- w, else hi <- w) and redraw
+#     w ~ Uniform(lo, hi). The uniform law on the circle restricted to E is
+#     invariant and the move is reversible: from the accepted point the same
+#     rejected points produce the same brackets, with the same probability. A
+#     cap on the number of proposals (or on the bracket width) is symmetric for
+#     the same reason, so stopping early and staying put keeps reversibility.
+#     No step size: eps is ignored.
+#
 # For a SYMMETRIC proposal with a FLAT target restricted to E, the Metropolis
 # acceptance ratio is exactly the indicator 1{Q' in E}. Hence K is reversible
 # w.r.t. Uniform(E), and K^L (K applied L times) is also reversible w.r.t.
@@ -108,52 +127,87 @@
 }
 
 # -----------------------------------------------------------------------------
-# .bc_kernel_step(Q, eps, feasible): ONE symmetric-proposal Metropolis step on
-# the Stiefel manifold. Propose Q' = Cayley(eps) Q; accept iff feasible(Q'),
-# else stay. Returns list(Q, moved). Reversible w.r.t. Uniform(E).
+# .bc_givens_step(Q, eps): symmetric single-plane Givens proposal Q' = G_ij(w) Q
+# with (i, j), i < j, uniform among the row pairs of Q and w ~ N(0, (eps*pi)^2).
+# Left multiplication by an orthogonal matrix keeps Q'Q = I and preserves the
+# uniform law on St(r-1, p); G_ij(w)^{-1} = G_ij(-w) and w is sign-symmetric,
+# so the proposal is reversible w.r.t. that uniform law.
 # -----------------------------------------------------------------------------
 #' @keywords internal
 #' @noRd
-.bc_kernel_step <- function(Q, eps, feasible) {
-  Qp <- cayley_left_step(Q, eps)          # symmetric proposal on St(r-1, p)
-  if (isTRUE(feasible(Qp))) list(Q = Qp, moved = TRUE)
-  else                      list(Q = Q,  moved = FALSE)
+.bc_givens_step <- function(Q, eps) {
+  ij <- sort(sample.int(nrow(Q), 2L))
+  givens_left(Q, ij[1], ij[2], stats::rnorm(1L, 0, eps * pi))
 }
 
-# .bc_kernel_L(Q, L, eps, feasible): K^L. Returns list(Q, n_moves in {0..L}).
+# .bc_propose(Q, eps, kernel): the proposal of the chosen kernel. "cayley" calls
+# cayley_left_step() exactly as before (same RNG draws), so the default path is
+# unchanged.
 #' @keywords internal
 #' @noRd
-.bc_kernel_L <- function(Q, L, eps, feasible) {
-  n_moves <- 0L
+.bc_propose <- function(Q, eps, kernel = "cayley") {
+  if (identical(kernel, "givens")) .bc_givens_step(Q, eps) else cayley_left_step(Q, eps)
+}
+
+# -----------------------------------------------------------------------------
+# .bc_givens_slice_step(Q, feasible, max_props, min_width): ONE shrinking-bracket
+# Givens move. Rows i < j uniform; w0 ~ Uniform(0, 2 pi); bracket [w0 - 2 pi, w0]
+# around the current point (w = 0); propose w, accept if feasible, else shrink
+# the bracket toward 0 and redraw. If max_props proposals fail, or the bracket
+# is narrower than min_width, stay at Q (both caps are symmetric in the two
+# directions of a move, so the kernel stays reversible w.r.t. Uniform(E)).
+# Returns list(Q, moved, n_calls) with n_calls = number of feasibility checks.
+# -----------------------------------------------------------------------------
+#' @keywords internal
+#' @noRd
+.bc_givens_slice_step <- function(Q, feasible, max_props = 200L, min_width = 1e-12) {
+  ij <- sort(sample.int(nrow(Q), 2L))
+  w  <- stats::runif(1L, 0, 2 * pi)
+  lo <- w - 2 * pi; hi <- w
+  n_props <- 0L
+  repeat {
+    Qp <- givens_left(Q, ij[1], ij[2], w)
+    n_props <- n_props + 1L
+    if (isTRUE(feasible(Qp))) return(list(Q = Qp, moved = TRUE, n_calls = n_props))
+    if (w < 0) lo <- w else hi <- w
+    if (n_props >= max_props || (hi - lo) < min_width)
+      return(list(Q = Q, moved = FALSE, n_calls = n_props))
+    w <- stats::runif(1L, lo, hi)
+  }
+}
+
+# -----------------------------------------------------------------------------
+# .bc_kernel_step(Q, eps, feasible, kernel): ONE kernel step on the Stiefel
+# manifold. "cayley"/"givens": symmetric-proposal Metropolis step (propose Q',
+# accept iff feasible(Q'), else stay). "givens_slice": one shrinking-bracket
+# Givens move (eps ignored). Returns list(Q, moved, n_calls). Reversible w.r.t.
+# Uniform(E).
+# -----------------------------------------------------------------------------
+#' @keywords internal
+#' @noRd
+.bc_kernel_step <- function(Q, eps, feasible, kernel = "cayley",
+                            slice_max_props = 200L) {
+  if (identical(kernel, "givens_slice"))
+    return(.bc_givens_slice_step(Q, feasible, max_props = slice_max_props))
+  Qp <- .bc_propose(Q, eps, kernel)       # symmetric proposal on St(r-1, p)
+  if (isTRUE(feasible(Qp))) list(Q = Qp, moved = TRUE,  n_calls = 1L)
+  else                      list(Q = Q,  moved = FALSE, n_calls = 1L)
+}
+
+# .bc_kernel_L(Q, L, eps, feasible, kernel): K^L. Returns
+# list(Q, n_moves in {0..L}, n_calls = feasibility checks used).
+#' @keywords internal
+#' @noRd
+.bc_kernel_L <- function(Q, L, eps, feasible, kernel = "cayley",
+                         slice_max_props = 200L) {
+  n_moves <- 0L; n_calls <- 0L
   for (s in seq_len(L)) {
-    st <- .bc_kernel_step(Q, eps, feasible)
+    st <- .bc_kernel_step(Q, eps, feasible, kernel, slice_max_props)
     if (st$moved) n_moves <- n_moves + 1L
+    n_calls <- n_calls + st$n_calls
     Q <- st$Q
   }
-  list(Q = Q, n_moves = n_moves)
-}
-
-# -----------------------------------------------------------------------------
-# .bc_calibrate_eps(Q_obs, feasible, ...): adapt the Cayley step eps toward a
-# target acceptance rate, by short pilot bursts from Q_obs. Only affects POWER,
-# never validity. Returns the chosen eps.
-# -----------------------------------------------------------------------------
-#' @keywords internal
-#' @noRd
-.bc_calibrate_eps <- function(Q_obs, feasible, eps0 = 0.3,
-                              target_lo = 0.20, target_hi = 0.60,
-                              n_probe = 40L, rounds = 8L,
-                              min_eps = 1e-4, max_eps = 2.0) {
-  eps <- eps0
-  for (rd in seq_len(rounds)) {
-    acc <- mean(vapply(seq_len(n_probe), function(.)
-      isTRUE(feasible(cayley_left_step(Q_obs, eps))), logical(1)))
-    if (acc < target_lo)      eps <- max(eps * 0.5, min_eps)
-    else if (acc > target_hi) eps <- min(eps * 1.5, max_eps)
-    else break
-    if (eps <= min_eps || eps >= max_eps) break
-  }
-  eps
+  list(Q = Q, n_moves = n_moves, n_calls = n_calls)
 }
 
 #' Algorithm-agnostic Besag-Clifford selective Hotelling test (arbitrary clustering)
@@ -203,14 +257,40 @@
 #'   `M >= 1`; larger `M` reduces Monte Carlo error.
 #' @param L Number of kernel steps per path edge (i.e. \eqn{K^L}). Larger `L`
 #'   improves spread/mixing and hence power.
-#' @param eps Cayley step size. If `NULL` and `calibrate = TRUE` it is
-#'   auto-tuned toward a workable acceptance rate; if `NULL` and
-#'   `calibrate = FALSE` it defaults to `0.3`.
+#' @param eps `"mixture"` (default) draws a step size independently for each
+#'   path edge from the fixed log-uniform `eps_range`. A positive numeric value
+#'   uses a fixed step size, and `NULL` uses `0.3`. The step size is never tuned
+#'   on the observed point, because that can break exactness.
 #' @param randomized If `TRUE` (default) returns the randomized upper-tail rank
 #'   p-value, which is exactly \eqn{\mathrm{Uniform}(0,1)} under \eqn{H_0}; if
 #'   `FALSE`, ties are broken conservatively.
-#' @param calibrate If `TRUE` (default) and `eps` is `NULL`, auto-tune the
-#'   Cayley step size for a workable acceptance rate.
+#' @param eps_range Bounds of the fixed log-uniform step-size mixture.
+#' @param kernel Proposal of the Metropolis kernel. `"givens"` (default; the
+#'   random Givens kernel of the paper) picks two rows \eqn{i < j} of \eqn{Q} uniformly at random and
+#'   proposes \eqn{Q' = G_{ij}(\omega) Q}, a rotation by angle
+#'   \eqn{\omega \sim N(0, (\pi\,\mathrm{eps})^2)} in that coordinate plane
+#'   (see `givens_left()`). Both proposals are symmetric and preserve the
+#'   uniform law on the Stiefel manifold, so both kernels are reversible
+#'   w.r.t. \eqn{\mathrm{Uniform}(E)} and the p-value is exact for either;
+#'   they differ only in mixing, hence power. `"cayley"` proposes
+#'   \eqn{Q' = UQ} with \eqn{U} a random Cayley rotation of step `eps`, which
+#'   moves every row of \eqn{Q} at once. `eps`, `eps_range` and the `"mixture"`
+#'   rule apply to both.
+#'   `"givens_slice"` is the shrinking-bracket Givens move (the shrinkage step
+#'   of elliptical slice sampling; Neal 2003; Murray, Adams and MacKay 2010):
+#'   it picks rows \eqn{i < j} uniformly, draws
+#'   \eqn{\omega_0 \sim \mathrm{Uniform}(0, 2\pi)}, sets the bracket
+#'   \eqn{[\omega_0 - 2\pi, \omega_0]} (which contains the current point
+#'   \eqn{\omega = 0}), proposes \eqn{\omega = \omega_0} and, while the
+#'   proposal is infeasible, shrinks the bracket toward 0 and redraws
+#'   \eqn{\omega} uniformly in it. It is reversible w.r.t.
+#'   \eqn{\mathrm{Uniform}(E)}, needs no step size (`eps` and `eps_range`
+#'   are ignored) and nearly always moves, at the price of several
+#'   `cl_fun` calls per step (see `n_path_calls`).
+#' @param slice_max_props For `kernel = "givens_slice"`: maximum number of
+#'   proposals (calls of `cl_fun`) in one shrinking-bracket step; if all fail the
+#'   chain stays put. The cap is symmetric in the two directions of a move, so
+#'   the kernel stays reversible and the p-value exact.
 #' @param cl_obs Optional precomputed `cl_fun(X)` (saves one call); otherwise it
 #'   is computed internally.
 #' @param ridge Small non-negative ridge added to the pooled covariance when
@@ -235,7 +315,11 @@
 #'   `condition_on` (`"pair-preserved"`), and `sampler` (`"besag-clifford"`).
 #'   Additional diagnostic fields are also returned: `p_cons` (conservative
 #'   tie-broken p-value), `p_oracle`, `M`, `L`, `eps`, `u_obs`, `path_u`, `J`,
-#'   `move_frac`, `stiefel_max`, `feas_ok`, and `n_feasible_path`.
+#'   `move_frac`, `stiefel_max`, `feas_ok`, `n_feasible_path`, `kernel`,
+#'   `n_path_calls` (calls of `cl_fun` made by the kernel along the path, the
+#'   compute measure for comparing kernels) and `n_cluster_calls` (all calls of
+#'   `cl_fun` made by this function, including the observed clustering when
+#'   `cl_obs` is not supplied, step-size calibration and the guards).
 #'
 #' @examples
 #' set.seed(1)
@@ -256,16 +340,24 @@
 #' @seealso [selective_hotelling_test()], [hotelling_T2()]
 #' @export
 selective_hotelling_bc <- function(X, cl_fun, k1, k2,
-                                   M = 300L, L = 2L, eps = NULL,
-                                   randomized = TRUE, calibrate = TRUE,
+                                   M = 5000L, L = 2L, eps = "mixture",
+                                   randomized = TRUE,
+                                   eps_range = c(1e-3, 1),
                                    cl_obs = NULL, ridge = 1e-8,
                                    stiefel_tol = 1e-8, guard_feas_checks = 25L,
-                                   oracle_Sigma = NULL, verbose = FALSE) {
+                                   oracle_Sigma = NULL, verbose = FALSE,
+                                   kernel = c("givens", "cayley", "givens_slice"),
+                                   slice_max_props = 200L) {
   stopifnot(is.matrix(X), M >= 1L, L >= 1L)
+  kernel <- match.arg(kernel)
   M <- as.integer(M); L <- as.integer(L)
+  slice <- identical(kernel, "givens_slice")
 
+  # count every call of cl_fun made here (n_cluster_calls) and those made by the
+  # kernel along the path (n_path_calls); counting draws no random numbers.
+  n_cluster_calls <- 0L
   .as_labels <- function(z) if (is.list(z) && !is.null(z$cluster)) z$cluster else z
-  if (is.null(cl_obs)) cl_obs <- .as_labels(cl_fun(X))
+  if (is.null(cl_obs)) { cl_obs <- .as_labels(cl_fun(X)); n_cluster_calls <- 1L }
   cl_obs <- as.integer(cl_obs)
   if (length(cl_obs) != nrow(X)) stop("cl_fun(X) length != nrow(X).")
   if (sum(cl_obs == k1) < 3L || sum(cl_obs == k2) < 3L)
@@ -273,7 +365,7 @@ selective_hotelling_bc <- function(X, cl_fun, k1, k2,
 
   setup    <- .bc_setup(X, cl_obs, k1, k2, cl_fun)
   Q_obs    <- setup$Q_obs
-  feasible <- setup$feasible
+  feasible <- function(Q) { n_cluster_calls <<- n_cluster_calls + 1L; setup$feasible(Q) }
   v        <- setup$v
   rdim <- nrow(Q_obs); pdim <- ncol(Q_obs); Ip <- diag(pdim)
 
@@ -283,8 +375,24 @@ selective_hotelling_bc <- function(X, cl_fun, k1, k2,
     stop("GUARD (c) FAILED: Q_obs is not feasible (cl_fun not reproducible on X(Q_obs)?).")
 
   # ---- step size ----
-  if (is.null(eps)) {
-    eps <- if (isTRUE(calibrate)) .bc_calibrate_eps(Q_obs, feasible) else 0.3
+  # eps = "mixture": every L-step block draws its own eps from a log-uniform law
+  # on eps_range that is fixed before the data are seen. A fixed-weight mixture of
+  # reversible kernels is reversible, so the Besag-Clifford p-value stays EXACT
+  # (aug-task 0w). Tuning eps on trial moves from Q_obs would make the kernel
+  # depend on the observed point, which can break exactness, so it is not offered.
+  # kernel = "givens_slice" has no step size: eps is ignored (and no random
+  # numbers are drawn for it).
+  mixture <- !slice && identical(eps, "mixture")
+  if (slice) {
+    eps <- NA_real_
+    draw_eps <- function() NA_real_
+  } else if (mixture) {
+    stopifnot(length(eps_range) == 2L, all(eps_range > 0), eps_range[1] < eps_range[2])
+    leps <- log(eps_range)
+    draw_eps <- function() exp(stats::runif(1L, leps[1], leps[2]))
+  } else {
+    if (is.null(eps)) eps <- 0.3
+    draw_eps <- function() eps
   }
 
   # ---- statistic u(Q) = ||Q' v||^2, monotone in the pair's Hotelling T^2 ----
@@ -300,7 +408,7 @@ selective_hotelling_bc <- function(X, cl_fun, k1, k2,
   path_u[J + 1L] <- u_obs
   path_Q[[J + 1L]] <- Q_obs
 
-  n_steps <- 0L; n_moves <- 0L
+  n_steps <- 0L; n_moves <- 0L; n_path_calls <- 0L
   record <- function(idx, Q) {
     path_u[idx + 1L] <<- uval(Q)
     path_Q[[idx + 1L]] <<- Q
@@ -309,14 +417,16 @@ selective_hotelling_bc <- function(X, cl_fun, k1, k2,
 
   Q <- Q_obs
   if (J < M) for (j in (J + 1L):M) {
-    kl <- .bc_kernel_L(Q, L, eps, feasible); Q <- kl$Q
+    kl <- .bc_kernel_L(Q, L, draw_eps(), feasible, kernel, slice_max_props); Q <- kl$Q
     n_steps <- n_steps + L; n_moves <- n_moves + kl$n_moves
+    n_path_calls <- n_path_calls + kl$n_calls
     record(j, Q)
   }
   Q <- Q_obs
   if (J > 0L) for (j in (J - 1L):0L) {
-    kl <- .bc_kernel_L(Q, L, eps, feasible); Q <- kl$Q
+    kl <- .bc_kernel_L(Q, L, draw_eps(), feasible, kernel, slice_max_props); Q <- kl$Q
     n_steps <- n_steps + L; n_moves <- n_moves + kl$n_moves
+    n_path_calls <- n_path_calls + kl$n_calls
     record(j, Q)
   }
   move_frac <- if (n_steps > 0L) n_moves / n_steps else NA_real_
@@ -374,11 +484,14 @@ selective_hotelling_bc <- function(X, cl_fun, k1, k2,
   T_obs <- hotelling_T2(X, cl_obs, k1, k2, ridge)
 
   if (verbose) {
-    cat(sprintf("[bc] n=%d p=%d  Q in St(%d,%d)  M=%d L=%d eps=%.4g\n",
-                nrow(X), pdim, rdim, pdim, M, L, eps))
+    cat(sprintf("[bc] n=%d p=%d  Q in St(%d,%d)  M=%d L=%d kernel=%s eps=%s\n",
+                nrow(X), pdim, rdim, pdim, M, L, kernel,
+                if (slice) "none"
+                else if (mixture) sprintf("mixture[%.3g, %.3g]", eps_range[1], eps_range[2])
+                else sprintf("%.4g", eps)))
     cat(sprintf("  J=%d u_obs=%.5g  #>=%d #>%d #==%d\n", J, u_obs, n_ge, n_gt, n_eq))
-    cat(sprintf("  p_bc=%.4f p_cons=%.4f  acc(move_frac)=%.3f  steps=%d\n",
-                p_bc, p_cons, move_frac, n_steps))
+    cat(sprintf("  p_bc=%.4f p_cons=%.4f  acc(move_frac)=%.3f  steps=%d  cl_fun calls: path=%d all=%d\n",
+                p_bc, p_cons, move_frac, n_steps, n_path_calls, n_cluster_calls))
     cat(sprintf("  GUARDS: stiefel max|Q'Q-I|=%.2e  feas=%d/%d (%s)\n",
                 stiefel_max, sum(feas_chk), length(feas_chk),
                 if (feas_ok) "OK" else "FAIL"))
@@ -400,7 +513,8 @@ selective_hotelling_bc <- function(X, cl_fun, k1, k2,
     p_cons = p_cons, p_oracle = p_oracle, M = M, L = L, eps = eps,
     u_obs = u_obs, path_u = path_u, J = J, move_frac = move_frac,
     stiefel_max = stiefel_max, feas_ok = feas_ok,
-    n_feasible_path = n_feasible_path
+    n_feasible_path = n_feasible_path, kernel = kernel,
+    n_path_calls = n_path_calls, n_cluster_calls = n_cluster_calls
   )
   class(out) <- "selectiveHotelling"
   out

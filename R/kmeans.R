@@ -232,55 +232,6 @@ kmeans_with_fixed_init_R <- function(x, init_centers_idx, max_iter = 50) {
 
 # ---------- Trajectory-based cluster preservation check ---------------------
 
-#' Check preservation of the full k-means trajectory for a cluster pair
-#'
-#' Returns `TRUE` only if, at *every* k-means iteration, the observations that
-#' were in clusters `k1` and `k2` of the original trajectory `traj0` form exactly
-#' two distinct clusters in the candidate trajectory `traj1`. This is the
-#' (experimental) trajectory-conditioning feasibility check.
-#'
-#' @param traj0,traj1 Lists of per-iteration cluster-assignment vectors.
-#' @param k1,k2 The two original cluster labels being tested.
-#'
-#' @return Logical scalar.
-#'
-#' @keywords internal
-preserve_trajectory <- function(traj0, traj1, k1, k2) {
-  # Check that ALL intermediate cluster assignments are preserved for clusters k1, k2.
-  # traj0, traj1: lists of cluster assignment vectors (one per k-means iteration)
-  # Returns TRUE only if every iteration's assignments match for the tested clusters.
-
-  # Must have same number of iterations
-  if (length(traj0) != length(traj1)) return(FALSE)
-
-  # Check each iteration
-  for (t in seq_along(traj0)) {
-    cl0_t <- traj0[[t]]
-    cl1_t <- traj1[[t]]
-
-    # Find which observations were in k1, k2 at iteration t in original
-    i1 <- which(cl0_t == k1)
-    i2 <- which(cl0_t == k2)
-
-    # In the new trajectory, these same observations must form exactly two clusters
-    L1 <- unique(cl1_t[i1])
-    L2 <- unique(cl1_t[i2])
-
-    # Each set must map to exactly one cluster label
-    if (length(L1) != 1 || length(L2) != 1) return(FALSE)
-
-    # The two clusters must be different
-    if (L1 == L2) return(FALSE)
-
-    # All obs in new cluster L1 must be exactly i1, and similarly for L2
-    if (!all(cl1_t[i1] == L1)) return(FALSE)
-    if (!all(cl1_t[i2] == L2)) return(FALSE)
-    if (!all(which(cl1_t == L1) %in% i1)) return(FALSE)
-    if (!all(which(cl1_t == L2) %in% i2)) return(FALSE)
-  }
-  TRUE
-}
-
 #' Check preservation of the final cluster pair
 #'
 #' Legacy/final-only feasibility check: requires that the observations in
@@ -301,33 +252,4 @@ preserve_cl_strict <- function(cl0, cl1, k1, k2) {
   if (length(L1) != 1 || length(L2) != 1) return(FALSE)
   all(cl1[i1] == L1) && all(cl1[i2] == L2) &&
     all(which(cl1 == L1) %in% i1) && all(which(cl1 == L2) %in% i2)
-}
-
-#' Map originally selected clusters to their current labels
-#'
-#' Feasibility checks permit label permutations, so downstream \eqn{T^2}
-#' calculations must use the *mapped* labels rather than reusing `k1`/`k2`. This
-#' returns the current labels of the originally selected clusters, or `NULL` if
-#' the pair is not preserved.
-#'
-#' @param cl0,cl1 Original and candidate cluster-assignment vectors.
-#' @param k1,k2 The two original cluster labels being tested.
-#'
-#' @return A named length-2 vector `c(k1 = L1, k2 = L2)`, or `NULL`.
-#'
-#' @keywords internal
-selected_pair_labels <- function(cl0, cl1, k1, k2) {
-  # Return the current labels corresponding to the originally selected clusters.
-  # Feasibility checks allow label permutations, so downstream T^2 calculations
-  # must use the mapped labels rather than blindly reusing k1/k2.
-  i1 <- which(cl0 == k1); i2 <- which(cl0 == k2)
-  if (length(i1) == 0 || length(i2) == 0) return(NULL)
-
-  L1 <- unique(cl1[i1]); L2 <- unique(cl1[i2])
-  if (length(L1) != 1 || length(L2) != 1 || L1 == L2) return(NULL)
-  if (!all(cl1[i1] == L1) || !all(cl1[i2] == L2)) return(NULL)
-  if (!all(which(cl1 == L1) %in% i1)) return(NULL)
-  if (!all(which(cl1 == L2) %in% i2)) return(NULL)
-
-  c(k1 = L1, k2 = L2)
 }

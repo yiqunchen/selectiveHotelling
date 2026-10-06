@@ -1,7 +1,7 @@
 # =============================================================================
-# selective_truncated_F: closed-form one-dimensional truncated-F selective test.
-# Exact k-means (Lloyd trajectory) + exact hierarchical (pair-preserved) engines,
-# and the algorithm-agnostic grid engine.
+# selective_truncated_F: the one-dimensional selective test. Besag-Clifford route
+# on the angle (default, any clustering) and the closed forms for the k-means
+# trajectory and the hclust merge order. No grid approximation.
 # =============================================================================
 
 hclust_cl_fun <- function(K = 3L, method = "average", square = TRUE) {
@@ -18,27 +18,18 @@ pick_big_pair <- function(cl) {
   list(k1 = big[1], k2 = big[2])
 }
 
-test_that("exact hclust route: valid p-value, S3 object, exact-vs-grid agree", {
+test_that("hclust route (default method = 'bc'): valid p-value and S3 object", {
   set.seed(101)
   X <- matrix(stats::rnorm(30 * 3), 30, 3)
   cl <- hclust_cl_fun(3L)(X)
   pk <- pick_big_pair(cl); skip_if(is.null(pk))
   skip_if(!is.finite(hotelling_T2(X, cl, pk$k1, pk$k2)))
-
-  res <- selective_truncated_F(X, pk$k1, pk$k2, clustering = "hclust", K = 3L)
+  res <- selective_truncated_F(X, pk$k1, pk$k2, clustering = "hclust", K = 3L, M = 200L)
   expect_s3_class(res, "selectiveHotelling")
-  expect_true(res$pval >= 0 && res$pval <= 1)
-  expect_identical(res$condition_on, "pair-preserved")
-  expect_identical(res$sampler, "truncated-F")
-  expect_true(is.na(res$se))                 # exact: no Monte Carlo error
+  expect_true(res$pval > 0 && res$pval <= 1)
+  expect_identical(res$mc_method, "bc")
+  expect_identical(res$onedim_kernel, "givens")
   expect_identical(res$df1, ncol(X))
-  expect_true(res$n_intervals >= 1L)
-
-  # exact closed-form arc and grid engine condition on the SAME event => agree
-  res_g <- selective_truncated_F(X, pk$k1, pk$k2, clustering = "hclust", K = 3L,
-                               method = "grid", n_grid = 600L)
-  expect_equal(res$pval, res_g$pval, tolerance = 5e-3)
-
   expect_output(print(res), "truncated-F")
   expect_output(summary(res), "Valid draws")
 })
@@ -52,7 +43,7 @@ test_that("exact k-means route: valid p-value and T2 = (r-2) cot^2(theta) identi
   pk <- pick_big_pair(cl); skip_if(is.null(pk))
   skip_if(!is.finite(hotelling_T2(X, cl, pk$k1, pk$k2)))
 
-  res <- selective_truncated_F(X, pk$k1, pk$k2, clustering = "kmeans", K = 3L,
+  res <- selective_truncated_F(X, pk$k1, pk$k2, clustering = "kmeans", method = "exact", K = 3L,
                              init_centers_idx = init_idx, ridge = 0)
   expect_s3_class(res, "selectiveHotelling")
   expect_true(res$pval >= 0 && res$pval <= 1)
@@ -64,20 +55,22 @@ test_that("exact k-means route: valid p-value and T2 = (r-2) cot^2(theta) identi
 })
 
 test_that("trivial (always-feasible) selection reduces to the classical F p-value", {
+  # custom cl_fun routes to the exact Besag-Clifford path on the angle (no grid).
+  # With an event that always holds, the path targets the unconditional angle law,
+  # so its p-value is a Monte Carlo estimate of the classical F p-value. Labels are
+  # assigned at random so that the classical p-value is moderate and resolvable.
   set.seed(202)
   X <- matrix(stats::rnorm(30 * 3), 30, 3)
-  cl <- hclust_cl_fun(3L)(X)
-  pk <- pick_big_pair(cl); skip_if(is.null(pk))
-  skip_if(!is.finite(hotelling_T2(X, cl, pk$k1, pk$k2)))
-
+  cl <- rep(1:3, length.out = 30)
   const_cl <- function(Xmat) cl          # ignores its input => pair always preserved
-  res <- selective_truncated_F(X, pk$k1, pk$k2, clustering = "custom",
-                             cl_fun = const_cl, cl_obs = cl)
-  expect_equal(res$n_intervals, 1L)
-  expect_equal(res$pval, res$p_uncond, tolerance = 1e-6)
+  res <- selective_truncated_F(X, 1L, 2L, clustering = "custom",
+                             cl_fun = const_cl, cl_obs = cl, M = 5000L)
+  expect_identical(res$mc_method, "bc")
+  expect_gt(res$p_uncond, 0.05)
+  expect_lt(abs(res$pval - res$p_uncond), 0.06)
 })
 
-test_that("custom cl_fun (grid) works and is algorithm-agnostic", {
+test_that("custom cl_fun works and is algorithm-agnostic", {
   set.seed(404)
   X <- matrix(stats::rnorm(45 * 3), 45, 3)
   init_idx <- c(1L, 16L, 31L)
@@ -86,8 +79,10 @@ test_that("custom cl_fun (grid) works and is algorithm-agnostic", {
   pk <- pick_big_pair(cl); skip_if(is.null(pk))
   skip_if(!is.finite(hotelling_T2(X, cl, pk$k1, pk$k2)))
   res <- selective_truncated_F(X, pk$k1, pk$k2, clustering = "custom",
-                             cl_fun = km_cl_fun, cl_obs = cl)
+                             cl_fun = km_cl_fun, cl_obs = cl, M = 200L)
   expect_s3_class(res, "selectiveHotelling")
+  expect_error(selective_truncated_F(X, pk$k1, pk$k2, clustering = "custom",
+                                     cl_fun = km_cl_fun, method = "exact"), "exact")
   expect_true(res$pval >= 0 && res$pval <= 1)
 })
 
@@ -98,43 +93,6 @@ test_that("errors when the pair is too small relative to dimension (r-1 <= p)", 
   const_cl <- function(Xmat) cl
   expect_error(selective_truncated_F(X, 1L, 2L, clustering = "custom",
                                    cl_fun = const_cl, cl_obs = cl), "r-1 > p")
-})
-
-test_that("small exactness sanity: exact hclust null p-values ~ uniform", {
-  # OPT-IN: this block is far too slow for a routine suite run. A single
-  # selective_truncated_F() call on the "hclust" exact route takes MINUTES even at
-  # n=30, p=3 -- the cost is the pair-preserved arc solver's event-driven cell
-  # traversal, not the (shared, fast) truncated-F p-value: the same p-value code
-  # runs 12 replicates of the k-means route at n=400, p=10 in seconds. At 120
-  # replicates this block alone runs for hours and pushes the whole suite past any
-  # sane time limit, so it is gated rather than silently making `test_dir` unusable.
-  #
-  #   SELHOT_SLOW_TESTS=1 Rscript -e 'testthat::test_file(...)'
-  #     (or sbatch slurm/run_tests_slow.sbatch)
-  #
-  # If the hclust arc solver is ever optimised, drop the gate.
-  skip_if(!identical(Sys.getenv("SELHOT_SLOW_TESTS"), "1"),
-          "slow: hclust exact-route uniformity check (set SELHOT_SLOW_TESTS=1)")
-  set.seed(7)
-  reps <- 120L
-  clf <- hclust_cl_fun(3L)
-  pvals <- rep(NA_real_, reps)
-  for (i in seq_len(reps)) {
-    X <- matrix(stats::rnorm(30 * 3), 30, 3)
-    cl <- clf(X)
-    pk <- pick_big_pair(cl)
-    if (is.null(pk)) next
-    if (!is.finite(hotelling_T2(X, cl, pk$k1, pk$k2))) next
-    res <- tryCatch(selective_truncated_F(X, pk$k1, pk$k2, clustering = "hclust",
-                                        K = 3L, cl_obs = cl),
-                    error = function(e) NULL)
-    if (!is.null(res)) pvals[i] <- res$pval
-  }
-  ok <- pvals[is.finite(pvals)]
-  expect_gt(length(ok), 30L)
-  expect_gt(mean(ok), 0.34)
-  expect_lt(mean(ok), 0.66)
-  expect_lt(mean(ok <= 0.05), 0.16)
 })
 
 # ---- hclust_event = "trace": the lifetime/endpoint characterisation -----------
@@ -188,7 +146,7 @@ test_that("trace lifetime constraints characterise the merge trace exactly", {
   }
 })
 
-test_that("trace conditioning refuses non-average linkage and labels its event", {
+test_that("merge-order conditioning refuses other linkages and labels its event", {
   # Average linkage chains off singletons, so a fixed seed often has no pair with
   # >= 3 members. Search rather than skip: skipping would make this test vacuous.
   X <- cl <- k1 <- k2 <- NULL
@@ -205,14 +163,80 @@ test_that("trace conditioning refuses non-average linkage and labels its event",
   }
   expect_false(is.null(X))          # 60 seeds without a testable pair = real problem
   # the theorem is average-linkage only -- must error, not return a wrong arc set
-  for (lk in c("centroid", "single", "complete"))
+  # (single linkage has its own Kruskal-edge trace event, tested below)
+  for (lk in c("centroid", "complete"))
     expect_error(selective_truncated_F(X, k1 = k1, k2 = k2, clustering = "hclust",
                    method = "exact", K = 3L, cl_obs = cl, hclust_method = lk,
-                   hclust_event = "trace"), "average linkage only")
+                   hclust_event = "trace"), "average and single")
   out <- selective_truncated_F(X, k1 = k1, k2 = k2, clustering = "hclust",
            method = "exact", K = 3L, cl_obs = cl, hclust_method = "average",
            hclust_event = "trace")
-  # "trace" and "pair" are DIFFERENT events and must not share a label
+  # the merge-order event is labelled as such
   expect_identical(out$condition_on, "hclust-merge-trace")
   expect_true(is.na(out$pval) || (out$pval >= 0 && out$pval <= 1))
+})
+
+# ---- single linkage, hclust_event = "trace": the Kruskal-edge event ----------
+# The closed-form arcs must agree with a brute-force check that the first n-K
+# Kruskal (MST) edges are the observed point pairs, in order, at every grid angle.
+test_that("single-linkage Kruskal-edge arcs match brute force", {
+  e <- asNamespace("selectiveHotelling")
+  kedges <- function(X, q) {
+    D2 <- as.matrix(stats::dist(X))^2; n <- nrow(X)
+    ut <- which(upper.tri(D2)); o <- ut[order(D2[ut])]
+    comp <- seq_len(n); out <- character(0)
+    for (k in o) {
+      i <- (k - 1L) %% n + 1L; j <- (k - 1L) %/% n + 1L
+      if (comp[i] != comp[j]) {
+        out <- c(out, paste(min(i, j), max(i, j)))
+        comp[comp == comp[j]] <- comp[i]
+        if (length(out) == q) break
+      }
+    }
+    paste(out, collapse = ",")
+  }
+  n_checked <- 0L
+  for (s in 1:40) {
+    set.seed(s)
+    n <- 24L; p <- 2L
+    X <- matrix(stats::rnorm(n * p), n, p); X[, 1] <- X[, 1] + rep(c(-5, 0, 5), 8)
+    cl <- hclust_fun(X, k = 3, method = "single")$cluster
+    tb <- sort(table(cl), decreasing = TRUE)
+    if (length(tb) < 2L || tb[2] < 3L) next
+    k1 <- as.integer(names(tb)[1]); k2 <- as.integer(names(tb)[2])
+    out <- selective_truncated_F(X, k1 = k1, k2 = k2, clustering = "hclust",
+             method = "exact", K = 3L, cl_obs = cl, hclust_method = "single", hclust_event = "trace")
+    expect_identical(out$condition_on, "hclust-single-kruskal")
+    expect_true(out$pval >= 0 && out$pval <= 1)
+    arcs <- out$intervals
+    inside <- function(t) any(t >= arcs[, 1] & t <= arcs[, 2])
+    expect_true(inside(out$theta_obs))
+    red <- e$.truncF_reduce(X, cl, k1, k2); geo <- red$geo
+    ref <- kedges(X, n - 3L)
+    w <- arcs[, 2] - arcs[, 1]
+    ts <- c(seq(1e-6, pi / 2 - 1e-6, length.out = 150L),
+            seq(arcs[1, 1] - w[1], arcs[1, 2] + w[1], length.out = 61L))
+    ts <- ts[ts > 0 & ts < pi / 2]
+    # skip points within 1e-9 of a boundary, where the brute force is a coin flip
+    ts <- ts[vapply(ts, function(t) min(abs(t - arcs)) > 1e-9, logical(1))]
+    act  <- vapply(ts, function(t) kedges(red$X_of_Q(geo$Qtheta(t)), n - 3L) == ref, logical(1))
+    pred <- vapply(ts, inside, logical(1))
+    expect_identical(pred, act)
+    n_checked <- n_checked + 1L
+    if (n_checked >= 3L) break
+  }
+  expect_gte(n_checked, 3L)
+})
+
+test_that("sweep arc solver agrees with the scalar solver", {
+  e <- asNamespace("selectiveHotelling")
+  set.seed(11)
+  for (rep in 1:5) {
+    nC <- 40L
+    co <- list(A = stats::rnorm(nC), B = stats::rnorm(nC), C = stats::rnorm(nC),
+               D = stats::rnorm(nC), E = stats::rnorm(nC) - 3)
+    a1 <- e$.harmonic_feasible_arcs(co, 0, pi / 2)
+    a2 <- e$.harmonic_feasible_arcs_sweep(co, 0, pi / 2)
+    expect_equal(unname(a1), unname(a2), tolerance = 1e-8)
+  }
 })

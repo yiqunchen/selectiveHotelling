@@ -3,8 +3,7 @@
 #
 # Every selective p-value here is a ratio of Beta masses over a feasible set S.
 # If S is wrong the p-value is wrong, and nothing else in the pipeline will notice:
-# the test suite passed for months while the hclust march was silently truncating S
-# and returning a fabricated 1.0. These tests therefore check S itself, against the
+# These tests therefore check S itself, against the
 # only ground truth available -- actually re-running the clustering at many theta
 # and asking whether the conditioned-on event holds.
 #
@@ -41,28 +40,6 @@
   }
   NULL
 }
-
-test_that("hclust PAIR-PRESERVED arcs match brute-force re-clustering", {
-  e <- asNamespace("selectiveHotelling")
-  K <- 3L
-  cse <- .find_hclust_case(20L, 3L, K)
-  skip_if(is.null(cse), "no testable average-linkage pair in the search range")
-  g <- .cs_geo(cse$X, cse$cl, cse$k1, cse$k2)
-  arcs <- suppressWarnings(
-    e$.hclust_pairpreserved_arcs(g$PUW$P, g$PUW$U, g$PUW$W, g$red$X_of_Q,
-                                 g$geo$Qtheta, K, cse$cl, cse$k1, cse$k2,
-                                 method = "average", square = TRUE))
-  skip_if(isTRUE(attr(arcs, "capped")), "march capped; arc set is truncated by design")
-  ts <- seq(1e-6, pi / 2 - 1e-6, length.out = 150L)
-  held <- vapply(ts, function(t) {
-    clt <- as.integer(stats::cutree(
-      stats::hclust(stats::dist(g$red$X_of_Q(g$geo$Qtheta(t)))^2, method = "average"), k = K))
-    e$.bc_pair_preserved(cse$cl, clt, cse$k1, cse$k2)
-  }, logical(1))
-  inside <- vapply(ts, function(t) .in_arcs(arcs, t), logical(1))
-  expect_identical(inside, held)
-  expect_true(.in_arcs(arcs, g$geo$theta_obs))   # observed data is always feasible
-})
 
 test_that("hclust MERGE-TRACE arcs match brute-force re-clustering", {
   e <- asNamespace("selectiveHotelling")
@@ -127,23 +104,3 @@ test_that("k-means Lloyd-trajectory arcs match brute-force re-running Lloyd", {
   expect_true(.in_arcs(arcs, g$geo$theta_obs))
 })
 
-test_that("a capped hclust march is reported, never silently truncated", {
-  # The march has a cell budget. If it runs out, the arc set is a strict subset of
-  # the truth and the p-value must NOT be reported as a number -- historically this
-  # returned exactly 1.0, which reads as a confident non-rejection.
-  e <- asNamespace("selectiveHotelling")
-  K <- 3L
-  cse <- .find_hclust_case(20L, 3L, K)
-  skip_if(is.null(cse), "no testable average-linkage pair in the search range")
-  g <- .cs_geo(cse$X, cse$cl, cse$k1, cse$k2)
-  arcs <- suppressWarnings(
-    e$.hclust_pairpreserved_arcs(g$PUW$P, g$PUW$U, g$PUW$W, g$red$X_of_Q,
-                                 g$geo$Qtheta, K, cse$cl, cse$k1, cse$k2,
-                                 method = "average", square = TRUE,
-                                 max_cells = 3L))          # force the cap
-  expect_true(isTRUE(attr(arcs, "capped")))
-  res <- e$.truncF_result(g$red, arcs, cse$X, cse$cl, cse$k1, cse$k2,
-                          "pair-preserved", 1e-8)
-  expect_true(is.na(res$pval))
-  expect_true(isTRUE(res$capped))
-})

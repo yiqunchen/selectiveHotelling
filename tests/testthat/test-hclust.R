@@ -110,20 +110,15 @@ test_that("small exactness sanity: hclust route mean p-value ~ uniform", {
   expect_lt(mean(ok <= 0.05), 0.25)
 })
 
-test_that("backward-compat: clustering='kmeans' defaults still use the MCMC sampler", {
-  set.seed(2024)
-  X <- generate_exchangeable_null_data(30, 2, rho = 0.1)$dat
-
-  res <- selective_hotelling_test(
-    X, 1, 2, K = 3, clustering = "kmeans", sampler = "fast",
-    burn = 100, B = 200, thin = 2,
-    verbose = FALSE, show_progress = FALSE
-  )
-
+test_that("clustering = 'kmeans' uses the same Besag-Clifford route", {
+  set.seed(2)
+  X <- rbind(matrix(stats::rnorm(20), 10, 2), matrix(stats::rnorm(20) + 6, 10, 2),
+             matrix(stats::rnorm(20) - 6, 10, 2))
+  set.seed(5)
+  res <- selective_hotelling_test(X, 1, 2, K = 3, clustering = "kmeans", M = 60L)
   expect_s3_class(res, "selectiveHotelling")
-  expect_identical(res$sampler, "fast")
-  expect_identical(res$condition_on, "final")
-  expect_identical(res$K, 3)
+  expect_identical(res$sampler, "besag-clifford")
+  expect_identical(res$condition_on, "pair-preserved")
   expect_true(is.finite(res$pval))
   expect_gt(res$pval, 0)
   expect_lte(res$pval, 1)
