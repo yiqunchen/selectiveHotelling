@@ -1,0 +1,57 @@
+url: https://yiqunchen.github.io/selectiveHotelling/
+
+template:
+  bootstrap: 5
+
+navbar:
+  structure:
+    left:  [home, articles, tutorials_kmeans, tutorials_hier, tutorials_any, tutorials_onedim, example, reference]
+    right: [github]
+
+  components:
+    articles:
+      text: Technical details
+      href: articles/technical_details.html
+
+    tutorials_kmeans:
+      text: Tutorials for k-means clustering
+      href: articles/Tutorials.html
+
+    tutorials_hier:
+      text: Tutorials for hierarchical clustering
+      href: articles/Tutorials_hier.html
+
+    tutorials_any:
+      text: Any clustering algorithm
+      href: articles/Tutorials_any.html
+
+    tutorials_onedim:
+      text: One-dimensional test
+      href: articles/Tutorials_onedim.html
+
+    example:
+      text: Application to real data
+      href: articles/real_data_example.html
+
+    github:
+      icon: fa-github
+      href: https://github.com/yiqunchen/selectiveHotelling
+      aria-label: GitHub
+
+reference:
+- title: Selective tests
+  contents:
+  - selective_hotelling_test
+  - selective_hotelling_bc
+  - selective_truncated_F
+- title: Clustering helpers
+  contents:
+  - kmeans_fun
+  - kmeans_with_fixed_init
+  - hclust_fun
+- title: Utilities
+  contents:
+  - hotelling_T2
+  - generate_exchangeable_null_data
+  - print.selectiveHotelling
+  - summary.selectiveHotelling

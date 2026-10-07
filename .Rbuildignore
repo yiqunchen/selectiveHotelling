@@ -2,5 +2,7 @@
 ^\.Rproj\.user$
 ^calibration.*
 ^\.gitignore$
-^tutorial$
-^_book$
+^_pkgdown\.yml$
+^docs$
+^pkgdown$
+^vignettes/articles$

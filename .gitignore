@@ -11,7 +11,4 @@
 
 # OS
 .DS_Store
-tutorial/_book/
-tutorial/_bookdown_files/
-tutorial/*_cache/
-tutorial/*_files/
+docs/

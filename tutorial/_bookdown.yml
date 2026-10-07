@@ -1,7 +1,0 @@
-book_filename: "selectiveHotelling-tutorial"
-output_dir: "_book"
-delete_merged_file: true
-language:
-  ui:
-    chapter_name: "Chapter "
-rmd_files: ["index.Rmd", "01-kmeans.Rmd", "02-hclust.Rmd", "03-any-clustering.Rmd", "04-onedim.Rmd", "05-real-data.Rmd", "06-details.Rmd"]

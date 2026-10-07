@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="" xml:lang="">
+<head>
+
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>Chapter 3 Tutorial: any clustering algorithm | selectiveHotelling: selective inference for clustering with an unknown covariance</title>
+  <meta name="description" content="A tutorial for the selectiveHotelling R package." />
+  <meta name="generator" content="bookdown 0.48 and GitBook 2.6.7" />
+
+  <meta property="og:title" content="Chapter 3 Tutorial: any clustering algorithm | selectiveHotelling: selective inference for clustering with an unknown covariance" />
+  <meta property="og:type" content="book" />
+  
+  <meta property="og:description" content="A tutorial for the selectiveHotelling R package." />
+  
+
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Chapter 3 Tutorial: any clustering algorithm | selectiveHotelling: selective inference for clustering with an unknown covariance" />
+  
+  <meta name="twitter:description" content="A tutorial for the selectiveHotelling R package." />
+  
+
+<meta name="author" content="Yiqun T. Chen and Lucy L. Gao" />
+
+
+<meta name="date" content="2026-10-07" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  
+  
+<link rel="prev" href="hclust.html"/>
+<link rel="next" href="onedim.html"/>
+<script src="libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fuse.js@6.4.6/dist/fuse.min.js"></script>
+<link href="libs/gitbook-2.6.7/css/style.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-table.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-bookdown.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-highlight.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-search.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-fontsettings.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-clipboard.css" rel="stylesheet" />
+
+
+
+
+
+
+
+
+<link href="libs/anchor-sections-1.1.0/anchor-sections.css" rel="stylesheet" />
+<link href="libs/anchor-sections-1.1.0/anchor-sections-hash.css" rel="stylesheet" />
+<script src="libs/anchor-sections-1.1.0/anchor-sections.js"></script>
+
+
+<style type="text/css">
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+    color: #aaaaaa;
+  }
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+code span.at { color: #7d9029; } /* Attribute */
+code span.bn { color: #40a070; } /* BaseN */
+code span.bu { color: #008000; } /* BuiltIn */
+code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+code span.ch { color: #4070a0; } /* Char */
+code span.cn { color: #880000; } /* Constant */
+code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+code span.dt { color: #902000; } /* DataType */
+code span.dv { color: #40a070; } /* DecVal */
+code span.er { color: #ff0000; font-weight: bold; } /* Error */
+code span.ex { } /* Extension */
+code span.fl { color: #40a070; } /* Float */
+code span.fu { color: #06287e; } /* Function */
+code span.im { color: #008000; font-weight: bold; } /* Import */
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+code span.op { color: #666666; } /* Operator */
+code span.ot { color: #007020; } /* Other */
+code span.pp { color: #bc7a00; } /* Preprocessor */
+code span.sc { color: #4070a0; } /* SpecialChar */
+code span.ss { color: #bb6688; } /* SpecialString */
+code span.st { color: #4070a0; } /* String */
+code span.va { color: #19177c; } /* Variable */
+code span.vs { color: #4070a0; } /* VerbatimString */
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+</style>
+
+<style type="text/css">
+  
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+</style>
+
+</head>
+
+<body>
+
+
+
+  <div class="book without-animation with-summary font-size-2 font-family-1" data-basepath=".">
+
+    <div class="book-summary">
+      <nav role="navigation">
+
+<ul class="summary">
+<li><a href="./">selectiveHotelling tutorial</a></li>
+
+<li class="divider"></li>
+<li class="chapter" data-level="" data-path="index.html"><a href="index.html"><i class="fa fa-check"></i>Overview</a>
+<ul>
+<li class="chapter" data-level="" data-path="index.html"><a href="index.html#installation"><i class="fa fa-check"></i>Installation</a></li>
+<li class="chapter" data-level="" data-path="index.html"><a href="index.html#citation"><i class="fa fa-check"></i>Citation</a></li>
+</ul></li>
+<li class="chapter" data-level="1" data-path="kmeans.html"><a href="kmeans.html"><i class="fa fa-check"></i><b>1</b> Tutorial: <span class="math inline">\(k\)</span>-means clustering</a>
+<ul>
+<li class="chapter" data-level="1.1" data-path="kmeans.html"><a href="kmeans.html#simulated-data"><i class="fa fa-check"></i><b>1.1</b> Simulated data</a></li>
+<li class="chapter" data-level="1.2" data-path="kmeans.html"><a href="kmeans.html#cluster-and-test"><i class="fa fa-check"></i><b>1.2</b> Cluster and test</a></li>
+<li class="chapter" data-level="1.3" data-path="kmeans.html"><a href="kmeans.html#compare-with-the-naive-test"><i class="fa fa-check"></i><b>1.3</b> Compare with the naive test</a></li>
+<li class="chapter" data-level="1.4" data-path="kmeans.html"><a href="kmeans.html#data-with-no-groups"><i class="fa fa-check"></i><b>1.4</b> Data with no groups</a></li>
+<li class="chapter" data-level="1.5" data-path="kmeans.html"><a href="kmeans.html#repeating-the-experiment"><i class="fa fa-check"></i><b>1.5</b> Repeating the experiment</a></li>
+<li class="chapter" data-level="1.6" data-path="kmeans.html"><a href="kmeans.html#fixing-the-k-means-initialization"><i class="fa fa-check"></i><b>1.6</b> Fixing the <span class="math inline">\(k\)</span>-means initialization</a></li>
+</ul></li>
+<li class="chapter" data-level="2" data-path="hclust.html"><a href="hclust.html"><i class="fa fa-check"></i><b>2</b> Tutorial: hierarchical clustering</a></li>
+<li class="chapter" data-level="3" data-path="any.html"><a href="any.html"><i class="fa fa-check"></i><b>3</b> Tutorial: any clustering algorithm</a>
+<ul>
+<li class="chapter" data-level="3.1" data-path="any.html"><a href="any.html#partitioning-around-medoids"><i class="fa fa-check"></i><b>3.1</b> Partitioning around medoids</a></li>
+<li class="chapter" data-level="3.2" data-path="any.html"><a href="any.html#a-clustering-function-with-a-random-step"><i class="fa fa-check"></i><b>3.2</b> A clustering function with a random step</a></li>
+<li class="chapter" data-level="3.3" data-path="any.html"><a href="any.html#what-selective_hotelling_bc-returns"><i class="fa fa-check"></i><b>3.3</b> What <code>selective_hotelling_bc()</code> returns</a></li>
+</ul></li>
+<li class="chapter" data-level="4" data-path="onedim.html"><a href="onedim.html"><i class="fa fa-check"></i><b>4</b> Tutorial: the one-dimensional test</a>
+<ul>
+<li class="chapter" data-level="4.1" data-path="onedim.html"><a href="onedim.html#any-clustering-algorithm"><i class="fa fa-check"></i><b>4.1</b> Any clustering algorithm</a></li>
+<li class="chapter" data-level="4.2" data-path="onedim.html"><a href="onedim.html#a-closed-form-for-k-means"><i class="fa fa-check"></i><b>4.2</b> A closed form for <span class="math inline">\(k\)</span>-means</a></li>
+<li class="chapter" data-level="4.3" data-path="onedim.html"><a href="onedim.html#which-test-to-use"><i class="fa fa-check"></i><b>4.3</b> Which test to use</a></li>
+</ul></li>
+<li class="chapter" data-level="5" data-path="realdata.html"><a href="realdata.html"><i class="fa fa-check"></i><b>5</b> Real data: Palmer penguins</a></li>
+<li class="chapter" data-level="6" data-path="details.html"><a href="details.html"><i class="fa fa-check"></i><b>6</b> Technical details and practical advice</a>
+<ul>
+<li class="chapter" data-level="6.1" data-path="details.html"><a href="details.html#what-the-tests-condition-on"><i class="fa fa-check"></i><b>6.1</b> What the tests condition on</a></li>
+<li class="chapter" data-level="6.2" data-path="details.html"><a href="details.html#how-the-p-value-is-computed"><i class="fa fa-check"></i><b>6.2</b> How the <span class="math inline">\(p\)</span>-value is computed</a></li>
+<li class="chapter" data-level="6.3" data-path="details.html"><a href="details.html#choosing-m-and-l"><i class="fa fa-check"></i><b>6.3</b> Choosing <code>M</code> and <code>L</code></a></li>
+<li class="chapter" data-level="6.4" data-path="details.html"><a href="details.html#requirements-and-limitations"><i class="fa fa-check"></i><b>6.4</b> Requirements and limitations</a></li>
+<li class="chapter" data-level="" data-path="details.html"><a href="details.html#references"><i class="fa fa-check"></i>References</a></li>
+</ul></li>
+<li class="divider"></li>
+<li><a href="https://github.com/yiqunchen/selectiveHotelling">Package on GitHub</a></li>
+
+</ul>
+
+      </nav>
+    </div>
+
+    <div class="book-body">
+      <div class="body-inner">
+        <div class="book-header" role="navigation">
+          <h1>
+            <i class="fa fa-circle-o-notch fa-spin"></i><a href="./">selectiveHotelling: selective inference for clustering with an unknown covariance</a>
+          </h1>
+        </div>
+
+        <div class="page-wrapper" tabindex="-1" role="main">
+          <div class="page-inner">
+
+            <section class="normal" id="section-">
+<div id="any" class="section level1 hasAnchor" number="3">
+<h1><span class="header-section-number">Chapter 3</span> Tutorial: any clustering algorithm<a href="any.html#any" class="anchor-section" aria-label="Anchor link to header"></a></h1>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="any.html#cb16-1" tabindex="-1"></a><span class="fu">library</span>(selectiveHotelling)</span></code></pre></div>
+<p>The test needs only one thing from the clustering algorithm: a function <code>cl_fun</code> that takes
+a data matrix and returns a vector of cluster labels. <code>selective_hotelling_bc()</code> reruns this
+function on perturbed versions of the data and keeps the perturbations under which the
+tested clusters are returned again.</p>
+<p>The function must be <strong>deterministic</strong>: run twice on the same data, it must return the same
+labels. Fix any random seed or random initialization inside the function, as below.</p>
+<div id="partitioning-around-medoids" class="section level2 hasAnchor" number="3.1">
+<h2><span class="header-section-number">3.1</span> Partitioning around medoids<a href="any.html#partitioning-around-medoids" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="any.html#cb17-1" tabindex="-1"></a><span class="fu">library</span>(cluster)</span>
+<span id="cb17-2"><a href="any.html#cb17-2" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">123</span>)</span>
+<span id="cb17-3"><a href="any.html#cb17-3" tabindex="-1"></a>X <span class="ot">&lt;-</span> <span class="fu">rbind</span>(<span class="fu">matrix</span>(<span class="fu">rnorm</span>(<span class="dv">100</span>), <span class="at">ncol =</span> <span class="dv">2</span>), <span class="fu">matrix</span>(<span class="fu">rnorm</span>(<span class="dv">100</span>), <span class="at">ncol =</span> <span class="dv">2</span>) <span class="sc">+</span> <span class="dv">4</span>,</span>
+<span id="cb17-4"><a href="any.html#cb17-4" tabindex="-1"></a>           <span class="fu">matrix</span>(<span class="fu">rnorm</span>(<span class="dv">100</span>), <span class="at">ncol =</span> <span class="dv">2</span>) <span class="sc">-</span> <span class="dv">4</span>)</span>
+<span id="cb17-5"><a href="any.html#cb17-5" tabindex="-1"></a></span>
+<span id="cb17-6"><a href="any.html#cb17-6" tabindex="-1"></a>cl_fun <span class="ot">&lt;-</span> <span class="cf">function</span>(x) cluster<span class="sc">::</span><span class="fu">pam</span>(x, <span class="at">k =</span> <span class="dv">3</span>, <span class="at">cluster.only =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb17-7"><a href="any.html#cb17-7" tabindex="-1"></a>cl <span class="ot">&lt;-</span> <span class="fu">cl_fun</span>(X)</span>
+<span id="cb17-8"><a href="any.html#cb17-8" tabindex="-1"></a><span class="fu">table</span>(cl)</span>
+<span id="cb17-9"><a href="any.html#cb17-9" tabindex="-1"></a><span class="co">#&gt; cl</span></span>
+<span id="cb17-10"><a href="any.html#cb17-10" tabindex="-1"></a><span class="co">#&gt;  1  2  3 </span></span>
+<span id="cb17-11"><a href="any.html#cb17-11" tabindex="-1"></a><span class="co">#&gt; 50 50 50</span></span>
+<span id="cb17-12"><a href="any.html#cb17-12" tabindex="-1"></a><span class="fu">selective_hotelling_bc</span>(X, cl_fun, <span class="at">k1 =</span> <span class="dv">1</span>, <span class="at">k2 =</span> <span class="dv">2</span>, <span class="at">M =</span> <span class="dv">1000</span>)<span class="sc">$</span>pval</span>
+<span id="cb17-13"><a href="any.html#cb17-13" tabindex="-1"></a><span class="co">#&gt; [1] 0.0003431453</span></span></code></pre></div>
+</div>
+<div id="a-clustering-function-with-a-random-step" class="section level2 hasAnchor" number="3.2">
+<h2><span class="header-section-number">3.2</span> A clustering function with a random step<a href="any.html#a-clustering-function-with-a-random-step" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<p>If the algorithm uses random numbers, fix the seed inside the function and restore the
+caller’s random number stream afterwards:</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="any.html#cb18-1" tabindex="-1"></a>cl_fun_random <span class="ot">&lt;-</span> <span class="cf">function</span>(x) {</span>
+<span id="cb18-2"><a href="any.html#cb18-2" tabindex="-1"></a>  old <span class="ot">&lt;-</span> .Random.seed</span>
+<span id="cb18-3"><a href="any.html#cb18-3" tabindex="-1"></a>  <span class="fu">on.exit</span>(<span class="fu">assign</span>(<span class="st">&quot;.Random.seed&quot;</span>, old, <span class="at">envir =</span> <span class="fu">globalenv</span>()))</span>
+<span id="cb18-4"><a href="any.html#cb18-4" tabindex="-1"></a>  <span class="fu">set.seed</span>(<span class="dv">1</span>)</span>
+<span id="cb18-5"><a href="any.html#cb18-5" tabindex="-1"></a>  <span class="fu">kmeans</span>(x, <span class="at">centers =</span> <span class="dv">3</span>, <span class="at">nstart =</span> <span class="dv">5</span>)<span class="sc">$</span>cluster</span>
+<span id="cb18-6"><a href="any.html#cb18-6" tabindex="-1"></a>}</span>
+<span id="cb18-7"><a href="any.html#cb18-7" tabindex="-1"></a><span class="fu">selective_hotelling_bc</span>(X, cl_fun_random, <span class="at">k1 =</span> <span class="dv">1</span>, <span class="at">k2 =</span> <span class="dv">2</span>, <span class="at">M =</span> <span class="dv">1000</span>)<span class="sc">$</span>pval</span>
+<span id="cb18-8"><a href="any.html#cb18-8" tabindex="-1"></a><span class="co">#&gt; [1] 0.007543708</span></span></code></pre></div>
+<p>The same approach works for community detection on a nearest-neighbor graph, as used for
+single-cell data, or for any other method.</p>
+</div>
+<div id="what-selective_hotelling_bc-returns" class="section level2 hasAnchor" number="3.3">
+<h2><span class="header-section-number">3.3</span> What <code>selective_hotelling_bc()</code> returns<a href="any.html#what-selective_hotelling_bc-returns" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb19-1"><a href="any.html#cb19-1" tabindex="-1"></a>res <span class="ot">&lt;-</span> <span class="fu">selective_hotelling_bc</span>(X, cl_fun, <span class="at">k1 =</span> <span class="dv">1</span>, <span class="at">k2 =</span> <span class="dv">3</span>, <span class="at">M =</span> <span class="dv">1000</span>)</span>
+<span id="cb19-2"><a href="any.html#cb19-2" tabindex="-1"></a><span class="fu">c</span>(<span class="at">pval =</span> res<span class="sc">$</span>pval, <span class="at">T2 =</span> res<span class="sc">$</span>T_obs, <span class="at">move_fraction =</span> res<span class="sc">$</span>move_frac)</span>
+<span id="cb19-3"><a href="any.html#cb19-3" tabindex="-1"></a><span class="co">#&gt;          pval            T2 move_fraction </span></span>
+<span id="cb19-4"><a href="any.html#cb19-4" tabindex="-1"></a><span class="co">#&gt;  4.792621e-04  9.510972e+02  7.510000e-01</span></span></code></pre></div>
+<p><code>move_fraction</code> is the fraction of steps at which the Monte Carlo path moved. Values far
+below about <span class="math inline">\(0.3\)</span> suggest that the path barely explores the set of data sets that
+reproduce the clusters, which lowers power but not validity (Chapter <a href="details.html#details">6</a>).</p>
+
+</div>
+</div>
+            </section>
+
+          </div>
+        </div>
+      </div>
+<a href="hclust.html" class="navigation navigation-prev " aria-label="Previous page"><i class="fa fa-angle-left"></i></a>
+<a href="onedim.html" class="navigation navigation-next " aria-label="Next page"><i class="fa fa-angle-right"></i></a>
+    </div>
+  </div>
+<script src="libs/gitbook-2.6.7/js/app.min.js"></script>
+<script src="libs/gitbook-2.6.7/js/clipboard.min.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-search.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-sharing.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-fontsettings.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-bookdown.js"></script>
+<script src="libs/gitbook-2.6.7/js/jquery.highlight.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-clipboard.js"></script>
+<script>
+gitbook.require(["gitbook"], function(gitbook) {
+gitbook.start({
+  "sharing": null,
+  "fontsettings": {
+    "theme": "white",
+    "family": "sans",
+    "size": 2
+  },
+  "edit": {
+    "link": null,
+    "text": null
+  },
+  "history": {
+    "link": null,
+    "text": null
+  },
+  "view": {
+    "link": null,
+    "text": null
+  },
+  "download": null,
+  "search": {
+    "engine": "fuse",
+    "options": null
+  },
+  "toc": {
+    "collapse": "subsection"
+  }
+});
+});
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    var src = "true";
+    if (src === "" || src === "true") src = "https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.9/latest.js?config=TeX-MML-AM_CHTML";
+    if (location.protocol !== "file:")
+      if (/^https?:/.test(src))
+        src = src.replace(/^https?:/, '');
+    script.src = src;
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+</body>
+
+</html>
