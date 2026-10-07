@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "selectiveHotelling": {
+      "command": "Rscript",
+      "args": ["mcp/server.R"]
+    }
+  }
+}

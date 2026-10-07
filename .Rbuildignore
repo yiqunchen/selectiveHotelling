@@ -6,3 +6,6 @@
 ^docs$
 ^pkgdown$
 ^vignettes/articles$
+^\.claude$
+^\.mcp\.json$
+^mcp$

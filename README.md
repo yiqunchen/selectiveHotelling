@@ -45,6 +45,20 @@ hierarchical clustering, arbitrary clustering algorithms, and the one-dimensiona
 data example, and the technical details. Its source is in
 [`vignettes/articles/`](https://github.com/yiqunchen/selectiveHotelling/tree/main/vignettes/articles).
 
+## Use with AI agents
+
+The repository includes an [MCP](https://modelcontextprotocol.io) server, `mcp/server.R`, that lets
+an agent cluster a data set and compute the selective p-values (tools `cluster_data`,
+`selective_test`, `onedim_test`, `package_help`). It needs only R and `jsonlite`. Claude Code picks
+it up from `.mcp.json` when started in a clone of this repository. To add it elsewhere:
+
+```bash
+claude mcp add selectiveHotelling -- Rscript /path/to/selectiveHotelling/mcp/server.R
+```
+
+Agent skills in `.claude/skills/` cover running the test correctly
+(`selective-test-after-clustering`) and developing the package (`package-development`).
+
 ## Main functions
 
 | Function | Purpose |
