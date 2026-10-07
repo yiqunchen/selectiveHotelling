@@ -47,7 +47,8 @@ table(cluster = res12$cluster, true_group)
 ```
 
 ```{r kmeans-plot, fig.width = 5, fig.height = 4}
-plot(X, col = res12$cluster, pch = 19, xlab = "Feature 1", ylab = "Feature 2",
+cols <- c("#0072B2", "#E69F00", "#009E73")   # color-blind-safe palette
+plot(X, col = cols[res12$cluster], pch = 19, xlab = "Feature 1", ylab = "Feature 2",
      main = "")
 ```
 
@@ -125,7 +126,7 @@ these true null hypotheses and the selective test `r round(100 * mean(sim[, "sel
 With about $300$ data sets, the second number has a Monte Carlo standard error of about $1.3$
 percentage points; in a run with $2{,}000$ data sets, the selective test rejected $4.7\%$.
 
-## Fixing the $k$-means initialization
+## Fixing the k-means initialization
 
 $k$-means depends on its random initial centers. `selective_hotelling_test()` draws the
 initial centers once, from the current random seed, and reruns $k$-means from the same

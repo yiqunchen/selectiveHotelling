@@ -42,7 +42,8 @@ selective_hotelling_bc(X, cl_fun, k1 = 1, k2 = 2)
 
 The [package website](https://yiqunchen.github.io/selectiveHotelling/) has tutorials for k-means,
 hierarchical clustering, arbitrary clustering algorithms, and the one-dimensional test, a real
-data example, and the technical details. Its source is in [`vignettes/articles/`](vignettes/articles/).
+data example, and the technical details. Its source is in
+[`vignettes/articles/`](https://github.com/yiqunchen/selectiveHotelling/tree/main/vignettes/articles).
 
 ## Main functions
 
