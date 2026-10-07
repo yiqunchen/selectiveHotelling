@@ -32,7 +32,9 @@
 #' @param verbose Whether to print progress messages.
 #'
 #' @return An S3 object of class `"selectiveHotelling"`; see
-#'   [selective_hotelling_bc()] for its elements.
+#'   [selective_hotelling_bc()] for its elements. It also contains `cluster`, the
+#'   cluster labels of the clustering that was tested, so that `k1` and `k2` can be
+#'   matched to observations.
 #'
 #' @examples
 #' set.seed(2)
@@ -68,9 +70,11 @@ selective_hotelling_test <- function(X, k1, k2, K = 3,
     if (!identical(as.integer(cl_fun(X)), cl_obs))
       stop("k-means from the fixed initial centres does not reproduce the clustering.")
   }
-  selective_hotelling_bc(X, cl_fun, k1, k2, M = M, L = L, eps = "mixture",
-                         cl_obs = cl_obs, ridge = ridge, verbose = verbose,
-                         kernel = kernel)
+  res <- selective_hotelling_bc(X, cl_fun, k1, k2, M = M, L = L, eps = "mixture",
+                                cl_obs = cl_obs, ridge = ridge, verbose = verbose,
+                                kernel = kernel)
+  res$cluster <- if (is.null(cl_obs)) as.integer(cl_fun(X)) else cl_obs   # labels of the clustering that was tested
+  res
 }
 
 #' Print a selectiveHotelling object

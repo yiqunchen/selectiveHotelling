@@ -49,7 +49,9 @@ smaller than \eqn{1/(M+1)}.}
 }
 \value{
 An S3 object of class \code{"selectiveHotelling"}; see
-\code{\link[=selective_hotelling_bc]{selective_hotelling_bc()}} for its elements.
+\code{\link[=selective_hotelling_bc]{selective_hotelling_bc()}} for its elements. It also contains \code{cluster}, the
+cluster labels of the clustering that was tested, so that \code{k1} and \code{k2} can be
+matched to observations.
 }
 \description{
 Clusters \code{X} (k-means or hierarchical clustering, \code{K} clusters) and tests whether

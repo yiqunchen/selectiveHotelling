@@ -43,6 +43,14 @@ clustering. \emph{Journal of Machine Learning Research}.
 Gao, L. L., Bien, J. and Witten, D. (2024). Selective inference for
 hierarchical clustering. \emph{Journal of the American Statistical Association}.
 }
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://github.com/yiqunchen/selectiveHotelling}
+  \item Report bugs at \url{https://github.com/yiqunchen/selectiveHotelling/issues}
+}
+
+}
 \author{
 \strong{Maintainer}: Yiqun Chen \email{yiqun.t.chen@gmail.com}
 

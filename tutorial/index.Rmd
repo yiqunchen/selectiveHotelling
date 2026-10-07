@@ -1,0 +1,55 @@
+---
+title: "selectiveHotelling: selective inference for clustering with an unknown covariance"
+author: "Yiqun T. Chen and Lucy L. Gao"
+date: "`r Sys.Date()`"
+site: bookdown::bookdown_site
+documentclass: book
+description: "A tutorial for the selectiveHotelling R package."
+---
+
+# Overview {-}
+
+Clustering is often followed by a test of whether two of the estimated clusters have
+different means. If the same data are used both to form the clusters and to test them,
+a classical two-sample test, such as Hotelling's $T^2$ test, rejects true null hypotheses
+far more often than its nominal level: the clustering algorithm has already chosen groups
+that look different.
+
+**selectiveHotelling** computes *selective* $p$-values, which account for the fact that
+the clusters were estimated from the data. A test based on these $p$-values rejects a
+true null hypothesis with probability at most $\alpha$ among the data sets on which the
+clustering returns the tested clusters. Unlike earlier selective tests for clustering,
+the tests in this package do not need the covariance matrix of the features: it can be
+**unknown and unstructured**.
+
+The tests work with any clustering algorithm. This tutorial covers
+
+- $k$-means clustering (Chapter \@ref(kmeans)),
+- hierarchical clustering (Chapter \@ref(hclust)),
+- any other clustering algorithm (Chapter \@ref(any)),
+- a faster one-dimensional test (Chapter \@ref(onedim)),
+- a real data example (Chapter \@ref(realdata)), and
+- the ideas behind the tests and practical advice (Chapter \@ref(details)).
+
+## Installation {-}
+
+```{r, eval = FALSE}
+# install.packages("remotes")
+remotes::install_github("yiqunchen/selectiveHotelling")
+```
+
+The package depends only on base R. This tutorial also uses the **palmerpenguins** data in
+Chapter \@ref(realdata).
+
+## Citation {-}
+
+If you use the package, please cite
+
+> Chen, Y. T. and Gao, L. L. Selective inference for clustering under unknown covariance.
+
+The code that reproduces the paper is at
+<https://github.com/yiqunchen/selectiveHotelling-paper>.
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.align = "center", cache = TRUE)
+```
