@@ -58,6 +58,8 @@ claude mcp add selectiveHotelling -- Rscript /path/to/selectiveHotelling/mcp/ser
 
 Agent skills in `.claude/skills/` cover running the test correctly
 (`selective-test-after-clustering`) and developing the package (`package-development`).
+See [`mcp/README.md`](https://github.com/yiqunchen/selectiveHotelling/blob/main/mcp/README.md) and
+[`.claude/skills/README.md`](https://github.com/yiqunchen/selectiveHotelling/blob/main/.claude/skills/README.md).
 
 ## Main functions
 
