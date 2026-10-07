@@ -10,7 +10,8 @@ Description: Selective p-values for testing whether two clusters estimated from
     an exact Monte Carlo construction (Besag and Clifford, 1989), and they apply
     to any clustering algorithm, including k-means and hierarchical clustering.
 License: MIT + file LICENSE
-URL: https://github.com/yiqunchen/selectiveHotelling
+URL: https://github.com/yiqunchen/selectiveHotelling,
+    https://yiqunchen.github.io/selectiveHotelling/
 BugReports: https://github.com/yiqunchen/selectiveHotelling/issues
 Encoding: UTF-8
 Imports:

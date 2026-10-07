@@ -40,8 +40,9 @@ cl_fun <- function(x) cutree(hclust(dist(x), method = "complete"), k = 3)
 selective_hotelling_bc(X, cl_fun, k1 = 1, k2 = 2)
 ```
 
-The tutorial in [`tutorial/`](tutorial/) walks through k-means, hierarchical clustering,
-arbitrary clustering algorithms, the one-dimensional test, and a real data example.
+The [tutorial](https://yiqunchen.github.io/selectiveHotelling/) walks through k-means,
+hierarchical clustering, arbitrary clustering algorithms, the one-dimensional test, and a real
+data example. Its source is in [`tutorial/`](tutorial/).
 
 ## Main functions
 
