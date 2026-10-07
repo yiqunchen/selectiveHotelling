@@ -1,4 +1,4 @@
-# Tutorial: -means clustering
+# Tutorial: k-means clustering
 
 ``` r
 

@@ -14,5 +14,5 @@
   clustering](https://yiqunchen.github.io/selectiveHotelling/articles/Tutorials_hier.md):
 - [Tutorial: the one-dimensional
   test](https://yiqunchen.github.io/selectiveHotelling/articles/Tutorials_onedim.md):
-- [Tutorial: \$k\$-means
+- [Tutorial: k-means
   clustering](https://yiqunchen.github.io/selectiveHotelling/articles/Tutorials.md):
