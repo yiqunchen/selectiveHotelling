@@ -15,7 +15,8 @@
 <link href="../deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
 <script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
-<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="Technical details and practical advice">
+<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet">
+<meta property="og:title" content="Technical details and practical advice">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -35,10 +36,15 @@
     <div id="navbar" class="collapse navbar-collapse ms-3">
       <ul class="navbar-nav me-auto">
 <li class="active nav-item"><a class="nav-link" href="../articles/technical_details.html">Technical details</a></li>
-<li class="nav-item"><a class="nav-link" href="../articles/Tutorials.html">Tutorials for k-means clustering</a></li>
-<li class="nav-item"><a class="nav-link" href="../articles/Tutorials_hier.html">Tutorials for hierarchical clustering</a></li>
-<li class="nav-item"><a class="nav-link" href="../articles/Tutorials_any.html">Any clustering algorithm</a></li>
-<li class="nav-item"><a class="nav-link" href="../articles/Tutorials_onedim.html">One-dimensional test</a></li>
+<li class="nav-item dropdown">
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-tutorials" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Tutorials</button>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-tutorials">
+<li><a class="dropdown-item" href="../articles/Tutorials.html">k-means clustering</a></li>
+    <li><a class="dropdown-item" href="../articles/Tutorials_hier.html">Hierarchical clustering</a></li>
+    <li><a class="dropdown-item" href="../articles/Tutorials_any.html">Any clustering algorithm</a></li>
+    <li><a class="dropdown-item" href="../articles/Tutorials_onedim.html">The one-dimensional test</a></li>
+  </ul>
+</li>
 <li class="nav-item"><a class="nav-link" href="../articles/real_data_example.html">Application to real data</a></li>
 <li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
       </ul>
@@ -114,9 +120,71 @@ that reproduce the clusters and give a larger
 than the observed one.</p>
 </div>
 <div class="section level2">
-<h2 id="how-the-p-value-is-computed">How the
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>p</mi><annotation encoding="application/x-tex">p</annotation></semantics></math>-value
-is computed<a class="anchor" aria-label="anchor" href="#how-the-p-value-is-computed"></a>
+<h2 id="the-three-p-values">The three p-values<a class="anchor" aria-label="anchor" href="#the-three-p-values"></a>
+</h2>
+<p>The package computes three selective
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>p</mi><annotation encoding="application/x-tex">p</annotation></semantics></math>-values.
+All three are exact under the null hypothesis, whatever
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi mathvariant="bold">𝚺</mi><annotation encoding="application/x-tex">\boldsymbol\Sigma</annotation></semantics></math>
+is; they differ in what they condition on, and the more they condition
+on, the less power they have.</p>
+<table class="table">
+<colgroup>
+<col width="20%">
+<col width="20%">
+<col width="20%">
+<col width="20%">
+<col width="20%">
+</colgroup>
+<thead><tr class="header">
+<th>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>p</mi><annotation encoding="application/x-tex">p</annotation></semantics></math>-value</th>
+<th>Function</th>
+<th>Clustering</th>
+<th>Conditions on</th>
+<th>Power</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>p</mi><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">l</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">r</mi></mrow></msub><annotation encoding="application/x-tex">p_{\mathrm{polar}}</annotation></semantics></math></td>
+<td>
+<code><a href="../reference/selective_hotelling_test.html">selective_hotelling_test()</a></code>,
+<code><a href="../reference/selective_hotelling_bc.html">selective_hotelling_bc()</a></code>
+</td>
+<td>any</td>
+<td>the clusters returned</td>
+<td>highest</td>
+</tr>
+<tr class="even">
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>p</mi><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">l</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">r</mi><mo mathvariant="normal">,</mo><mn mathvariant="normal">1</mn><mi mathvariant="normal">d</mi></mrow></msub><annotation encoding="application/x-tex">p_{\mathrm{polar,1d}}</annotation></semantics></math></td>
+<td><code>selective_truncated_F(method = "bc")</code></td>
+<td>any</td>
+<td>also all but one direction of
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi mathvariant="bold-italic">𝑸</mi><annotation encoding="application/x-tex">\mathbf{Q}</annotation></semantics></math>
+</td>
+<td>lower</td>
+</tr>
+<tr class="odd">
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msubsup><mi>p</mi><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">l</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">r</mi><mo mathvariant="normal">,</mo><mn mathvariant="normal">1</mn><mi mathvariant="normal">d</mi></mrow><mrow><mi mathvariant="normal">t</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">j</mi></mrow></msubsup><annotation encoding="application/x-tex">p_{\mathrm{polar,1d}}^{\mathrm{traj}}</annotation></semantics></math></td>
+<td><code>selective_truncated_F(method = "exact")</code></td>
+<td>k-means</td>
+<td>also the whole k-means trajectory</td>
+<td>lowest</td>
+</tr>
+</tbody>
+</table>
+<p>Use
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>p</mi><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">l</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">r</mi></mrow></msub><annotation encoding="application/x-tex">p_{\mathrm{polar}}</annotation></semantics></math>
+by default. The one-dimensional
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>p</mi><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">l</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">r</mi><mo mathvariant="normal">,</mo><mn mathvariant="normal">1</mn><mi mathvariant="normal">d</mi></mrow></msub><annotation encoding="application/x-tex">p_{\mathrm{polar,1d}}</annotation></semantics></math>
+samples a single angle instead of the whole matrix
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi mathvariant="bold-italic">𝑸</mi><annotation encoding="application/x-tex">\mathbf{Q}</annotation></semantics></math>,
+so it is faster, and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msubsup><mi>p</mi><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">l</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">r</mi><mo mathvariant="normal">,</mo><mn mathvariant="normal">1</mn><mi mathvariant="normal">d</mi></mrow><mrow><mi mathvariant="normal">t</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">j</mi></mrow></msubsup><annotation encoding="application/x-tex">p_{\mathrm{polar,1d}}^{\mathrm{traj}}</annotation></semantics></math>
+has a closed form and needs no sampling at all (<a href="Tutorials_onedim.html">the one-dimensional tutorial</a>).</p>
+</div>
+<div class="section level2">
+<h2 id="how-the-main-p-value-is-computed">How the main p-value is computed<a class="anchor" aria-label="anchor" href="#how-the-main-p-value-is-computed"></a>
 </h2>
 <p>The set of matrices
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi mathvariant="bold-italic">𝑸</mi><annotation encoding="application/x-tex">\mathbf{Q}</annotation></semantics></math>
@@ -129,7 +197,7 @@ the tested clusters are returned again. The observed
 is placed at a random position on a path of <code>M + 1</code> points,
 and the
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>p</mi><annotation encoding="application/x-tex">p</annotation></semantics></math>-value
-is its rank among them <span class="citation">[@BesagClifford1989]</span>. This
+is its rank among them (Besag and Clifford, 1989). This
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>p</mi><annotation encoding="application/x-tex">p</annotation></semantics></math>-value
 is <strong>exact for any path length <code>M</code></strong> and any
 number of steps <code>L</code> between points: a short path gives a

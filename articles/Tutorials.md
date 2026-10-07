@@ -60,7 +60,7 @@ table(cluster = res12$cluster, true_group)
 
 ``` r
 
-plot(X, col = res12$cluster, pch = 19, xlab = "Feature 1", ylab = "Feature 2",
+plot(X, col = c("#0072B2", "#E69F00", "#009E73")[res12$cluster], pch = 19, xlab = "Feature 1", ylab = "Feature 2",
      main = "")
 ```
 
@@ -162,7 +162,7 @@ the second number has a Monte Carlo standard error of about $`1.3`$
 percentage points; in a run with $`2{,}000`$ data sets, the selective
 test rejected $`4.7\%`$.
 
-## Fixing the $`k`$-means initialization
+## Fixing the k-means initialization
 
 $`k`$-means depends on its random initial centers.
 [`selective_hotelling_test()`](https://yiqunchen.github.io/selectiveHotelling/reference/selective_hotelling_test.md)

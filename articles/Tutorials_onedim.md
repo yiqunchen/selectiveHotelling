@@ -43,7 +43,7 @@ c(onedim = res1d$pval, classical_F = res1d$p_uncond)
 `p_uncond` is the classical $`F`$$`p`$-value, which ignores the
 clustering.
 
-## A closed form for $`k`$-means
+## A closed form for k-means
 
 For $`k`$-means, the $`p`$-value can be computed exactly, without Monte
 Carlo, if we also condition on the whole sequence of assignments made by
@@ -66,7 +66,7 @@ three tests.
 |----|----|----|----|----|
 | $`p_{\mathrm{polar}}`$ | [`selective_hotelling_test()`](https://yiqunchen.github.io/selectiveHotelling/reference/selective_hotelling_test.md), [`selective_hotelling_bc()`](https://yiqunchen.github.io/selectiveHotelling/reference/selective_hotelling_bc.md) | the clustering | slowest | highest |
 | $`p_{\mathrm{polar,1d}}`$ | `selective_truncated_F(method = "bc")` | the clustering and all but one angle | faster | lower |
-| $`p_{\mathrm{polar,1d}}^{\mathrm{traj}}`$ | `selective_truncated_F(method = "exact")` | also the $`k`$-means trajectory | instant | lowest |
+| $`p_{\mathrm{polar,1d}}^{\mathrm{traj}}`$ | `selective_truncated_F(method = "exact")` | also the k-means trajectory | instant | lowest |
 
 All three control the selective Type I error. We recommend
 $`p_{\mathrm{polar}}`$ unless computing time is a constraint.

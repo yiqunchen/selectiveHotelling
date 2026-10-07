@@ -47,7 +47,7 @@ The [package website](https://yiqunchen.github.io/selectiveHotelling/)
 has tutorials for k-means, hierarchical clustering, arbitrary clustering
 algorithms, and the one-dimensional test, a real data example, and the
 technical details. Its source is in
-[`vignettes/articles/`](https://yiqunchen.github.io/selectiveHotelling/vignettes/articles/).
+[`vignettes/articles/`](https://github.com/yiqunchen/selectiveHotelling/tree/main/vignettes/articles).
 
 ## Main functions
 

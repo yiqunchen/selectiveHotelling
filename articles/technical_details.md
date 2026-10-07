@@ -22,7 +22,27 @@ whose distribution is known, and the selective $`p`$-value is the
 fraction of the matrices $`\mathbf{Q}`$ that reproduce the clusters and
 give a larger $`T^2`$ than the observed one.
 
-## How the $`p`$-value is computed
+## The three p-values
+
+The package computes three selective $`p`$-values. All three are exact
+under the null hypothesis, whatever $`\boldsymbol\Sigma`$ is; they
+differ in what they condition on, and the more they condition on, the
+less power they have.
+
+| $`p`$-value | Function | Clustering | Conditions on | Power |
+|----|----|----|----|----|
+| $`p_{\mathrm{polar}}`$ | [`selective_hotelling_test()`](https://yiqunchen.github.io/selectiveHotelling/reference/selective_hotelling_test.md), [`selective_hotelling_bc()`](https://yiqunchen.github.io/selectiveHotelling/reference/selective_hotelling_bc.md) | any | the clusters returned | highest |
+| $`p_{\mathrm{polar,1d}}`$ | `selective_truncated_F(method = "bc")` | any | also all but one direction of $`\mathbf{Q}`$ | lower |
+| $`p_{\mathrm{polar,1d}}^{\mathrm{traj}}`$ | `selective_truncated_F(method = "exact")` | k-means | also the whole k-means trajectory | lowest |
+
+Use $`p_{\mathrm{polar}}`$ by default. The one-dimensional
+$`p_{\mathrm{polar,1d}}`$ samples a single angle instead of the whole
+matrix $`\mathbf{Q}`$, so it is faster, and
+$`p_{\mathrm{polar,1d}}^{\mathrm{traj}}`$ has a closed form and needs no
+sampling at all ([the one-dimensional
+tutorial](https://yiqunchen.github.io/selectiveHotelling/articles/Tutorials_onedim.md)).
+
+## How the main p-value is computed
 
 The set of matrices $`\mathbf{Q}`$ that reproduce the clusters has no
 closed form. The package walks through it with a Markov chain: each step
@@ -30,9 +50,9 @@ rotates two rows of $`\mathbf{Q}`$ by a random angle, reruns the
 clustering, and keeps the rotation only if the tested clusters are
 returned again. The observed $`\mathbf{Q}`$ is placed at a random
 position on a path of `M + 1` points, and the $`p`$-value is its rank
-among them \[@BesagClifford1989\]. This $`p`$-value is **exact for any
-path length `M`** and any number of steps `L` between points: a short
-path gives a valid test with less power.
+among them (Besag and Clifford, 1989). This $`p`$-value is **exact for
+any path length `M`** and any number of steps `L` between points: a
+short path gives a valid test with less power.
 
 ## Choosing `M` and `L`
 
