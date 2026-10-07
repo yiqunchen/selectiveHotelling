@@ -103,7 +103,7 @@
 </h2>
 <p>The repository includes an <a href="https://modelcontextprotocol.io" class="external-link">MCP</a> server, <code>mcp/server.R</code>, that lets an agent cluster a data set and compute the selective p-values (tools <code>cluster_data</code>, <code>selective_test</code>, <code>onedim_test</code>, <code>package_help</code>). It needs only R and <code>jsonlite</code>. Claude Code picks it up from <code>.mcp.json</code> when started in a clone of this repository. To add it elsewhere:</p>
 <div class="sourceCode" id="cb3"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="ex">claude</span> mcp add selectiveHotelling <span class="at">--</span> Rscript /path/to/selectiveHotelling/mcp/server.R</span></code></pre></div>
-<p>Agent skills in <code>.claude/skills/</code> cover running the test correctly (<code>selective-test-after-clustering</code>) and developing the package (<code>package-development</code>).</p>
+<p>Agent skills in <code>.claude/skills/</code> cover running the test correctly (<code>selective-test-after-clustering</code>) and developing the package (<code>package-development</code>). See <a href="https://github.com/yiqunchen/selectiveHotelling/blob/main/mcp/README.md" class="external-link"><code>mcp/README.md</code></a> and <a href="https://github.com/yiqunchen/selectiveHotelling/blob/main/.claude/skills/README.md" class="external-link"><code>.claude/skills/README.md</code></a>.</p>
 </div>
 <div class="section level2">
 <h2 id="main-functions">Main functions<a class="anchor" aria-label="anchor" href="#main-functions"></a>
