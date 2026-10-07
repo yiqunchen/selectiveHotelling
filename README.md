@@ -1,4 +1,4 @@
-# selectiveHotelling
+# selectiveHotelling <img src="man/figures/logo.png" align="right" height="139" alt="" />
 
 Selective inference for the difference in means between two estimated clusters, when the
 covariance matrix of the features is **unknown**.
