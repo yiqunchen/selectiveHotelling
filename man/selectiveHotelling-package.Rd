@@ -47,6 +47,7 @@ hierarchical clustering. \emph{Journal of the American Statistical Association}.
 Useful links:
 \itemize{
   \item \url{https://github.com/yiqunchen/selectiveHotelling}
+  \item \url{https://yiqunchen.github.io/selectiveHotelling/}
   \item Report bugs at \url{https://github.com/yiqunchen/selectiveHotelling/issues}
 }
 

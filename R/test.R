@@ -65,7 +65,7 @@ selective_hotelling_test <- function(X, k1, k2, K = 3,
   } else {
     km <- kmeans_with_trajectory(X, k = K)          # draws the initial centres once
     init <- km$init_centers_idx
-    cl_fun <- function(x) kmeans_with_fixed_init(x, init_centers_idx = init)$cluster
+    cl_fun <- make_fast_kmeans_cl_fun(init)          # kmeans_with_fixed_init(), BLAS
     cl_obs <- as.integer(km$cluster)
     if (!identical(as.integer(cl_fun(X)), cl_obs))
       stop("k-means from the fixed initial centres does not reproduce the clustering.")

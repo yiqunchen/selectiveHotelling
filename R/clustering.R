@@ -81,6 +81,9 @@ hclust_fun <- function(x, k = 3, method = "average", square = TRUE) {
 #' @noRd
 make_hclust_cl_fun <- function(k = 3L, method = "average", square = TRUE) {
   force(k); force(method); force(square)
+  # Squared distances (the default): the same clustering from one BLAS product
+  # and fastcluster (R/fast_cluster.R), much faster when p is large.
+  if (isTRUE(square)) return(make_fast_hclust_cl_fun(k, method))
   function(Xmat) {
     if (!is.matrix(Xmat)) Xmat <- as.matrix(Xmat)
     d <- stats::dist(Xmat)

@@ -331,7 +331,7 @@ selective_truncated_F <- function(X, k1, k2,
       return(.truncF_exact_kmeans(X, k1, k2, K, init_centers_idx, ridge, verbose))
     cf <- if (!is.null(cl_fun)) cl_fun else {
       ii <- if (is.null(init_centers_idx)) kmeans_fun(X, k = K)$init_centers_idx else init_centers_idx
-      function(x) kmeans_with_fixed_init(x, init_centers_idx = ii)$cluster
+      make_fast_kmeans_cl_fun(ii)                    # kmeans_with_fixed_init(), BLAS
     }
     return(mc(cf))
   }
@@ -340,6 +340,6 @@ selective_truncated_F <- function(X, k1, k2,
     return(.truncF_exact_hclust(X, k1, k2, K, hclust_method, hclust_square,
                                 cl_obs, ridge, verbose))
   cf <- if (!is.null(cl_fun)) cl_fun else
-    function(x) hclust_fun(x, k = K, method = hclust_method, square = hclust_square)$cluster
+    make_hclust_cl_fun(K, hclust_method, hclust_square)   # hclust_fun(), fast when square
   mc(cf)
 }

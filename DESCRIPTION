@@ -18,6 +18,7 @@ Imports:
     stats
 Suggests:
     testthat (>= 3.0.0),
+    fastcluster,
     knitr,
     rmarkdown
 VignetteBuilder: knitr
