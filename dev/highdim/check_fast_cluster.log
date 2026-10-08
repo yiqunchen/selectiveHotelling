@@ -1,0 +1,7 @@
+(1) 448 data sets: k-means mismatches 0, average-linkage mismatches 0
+(2) n=50 p=250 km r=34 M=1000: identical path TRUE, identical p-values TRUE, move 0.71; 12.3s -> 3.4s
+(2) n=50 p=250 hc r=34 M=1000: identical path TRUE, identical p-values TRUE, move 0.71; 4.1s -> 2.7s
+(2) n=100 p=500 km r=67 M=1000: identical path TRUE, identical p-values TRUE, move 0.76; 42.8s -> 7.5s
+(2) n=100 p=500 hc r=67 M=1000: identical path TRUE, identical p-values TRUE, move 0.67; 19.7s -> 5.4s
+(2) n=500 p=1000 km r=334 M=150: identical path TRUE, identical p-values TRUE, move 0.91; 29.0s -> 6.4s
+(2) n=500 p=1000 hc r=334 M=150: identical path TRUE, identical p-values TRUE, move 0.84; 132.2s -> 8.1s
