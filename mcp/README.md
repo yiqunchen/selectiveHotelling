@@ -2,7 +2,8 @@
 
 `server.R` is a [Model Context Protocol](https://modelcontextprotocol.io) server that lets an AI
 agent (Claude Code, Claude Desktop, or any MCP client) run the selective tests in this package.
-It is plain R and needs only `jsonlite`. Run from a clone of this repository, it loads the
+It is plain R and needs only `jsonlite`. The package itself is documented at
+<https://yiqunchen.github.io/selectiveHotelling/>. Run from a clone of this repository, it loads the
 package source with `pkgload`; otherwise it uses the installed package.
 
 ## Setup
