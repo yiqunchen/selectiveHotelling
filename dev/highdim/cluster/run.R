@@ -5,7 +5,7 @@
 # Per data set: gen_highdim() (dev/highdim/dgp.R) -> fast k-means from rows drawn
 # from the seed, or fast average linkage (R/fast_cluster.R) -> every pair whose
 # clusters both have >= min_size rows -> selective_meandiff_bc() with all
-# statistics on one Besag-Clifford path (M, L from the manifest).
+# statistics on one Besag-Clifford path (the package defaults for M, L, kernel, eps).
 #
 # Output: one row per tested pair with every p-value (columns p_<stat>), the
 # observed statistics are not stored. `pair_alt` = both tested clusters pure and
@@ -38,8 +38,8 @@ if (SMOKE == 0L && file.exists(out_file)) {
     all(d$cell_id == row$cell_id) }, error = function(e) FALSE)
   if (isTRUE(ok)) { cat(sprintf("[hd %05d] SKIP (verified shard)\n", task)); quit(save = "no") }
 }
-cat(sprintf("[hd %05d] cell=%d alg=%s n=%d p=%d sig=%s signal=%s s=%g N=%d M=%d cores=%d BLAS=%s\n",
-            task, row$cell_id, row$alg, row$n, row$p, row$sig, row$signal, row$s, NS, row$M,
+cat(sprintf("[hd %05d] cell=%d alg=%s n=%d p=%d sig=%s signal=%s s=%g N=%d cores=%d BLAS=%s\n",
+            task, row$cell_id, row$alg, row$n, row$p, row$sig, row$signal, row$s, NS,
             cores, basename(sessionInfo()$BLAS)))
 
 STATS <- c("l2", "cq", "diag", "diag_w", "max", "ridge", "proj", "t2", "oracle")
@@ -74,7 +74,7 @@ one <- function(seed) {
     set.seed(as.integer((seed * 4 + q) %% 2147483647))
     t0 <- proc.time()
     res <- selective_meandiff_bc(d$X, st$cl_fun, k1, k2, stats = STATS, adapt = ADAPT,
-                                 M = row$M, L = row$L, cl_obs = cl, oracle_Sigma = d$Sigma)
+                                 cl_obs = cl, oracle_Sigma = d$Sigma)
     tt <- proc.time() - t0
     pv <- as.list(res$pvals); names(pv) <- paste0("p_", names(pv))
     out[[q]] <- data.frame(rep = seed, task = task, cell_id = row$cell_id, alg = row$alg,
@@ -85,7 +85,7 @@ one <- function(seed) {
                            recover = rec, pv, move_frac = res$move_frac,
                            n_path_calls = res$n_path_calls,
                            cpu = tt[["user.self"]] + tt[["sys.self"]], secs = tt[["elapsed"]],
-                           M = row$M, L = row$L, stringsAsFactors = FALSE)
+                           M = res$M, L = res$L, stringsAsFactors = FALSE)
   }
   do.call(rbind, out)
 }

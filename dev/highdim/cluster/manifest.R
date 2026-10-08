@@ -14,19 +14,20 @@
 #   power       s in S_GRID (N_POW data sets per cell)
 #   test        every pair whose clusters both have >= MIN_SIZE rows (with
 #               K = 3 the pair event fixes the whole partition, so any pair rule
-#               has constant weight on it); M = 5000, L = 2, Givens kernel,
-#               eps = "mixture"; all statistics ranked on the one path.
+#               has constant weight on it); the package defaults of
+#               selective_meandiff_bc() (M, L, Givens kernel, eps = "mixture");
+#               all statistics ranked on the one path.
 #
 # Shards: a whole cell per task for n <= 100 (<= ~10 CPU-h), SHARD_500 data sets
 # per task for n = 500 (~13 CPU-h); with 4 cores a task takes a few hours.
-# Env overrides: N_NULL, N_POW, N_NULL_500, N_POW_500, SHARD_SMALL, SHARD_500, M,
+# Env overrides: N_NULL, N_POW, N_NULL_500, N_POW_500, SHARD_SMALL, SHARD_500,
 # S_GRID (comma list).
 # =============================================================================
 env_num <- function(nm, d) as.numeric(Sys.getenv(nm, d))
 N_NULL     <- env_num("N_NULL", 500);  N_POW     <- env_num("N_POW", 200)
 N_NULL_500 <- env_num("N_NULL_500", 300); N_POW_500 <- env_num("N_POW_500", 100)
 SHARD_SMALL <- env_num("SHARD_SMALL", 500); SHARD_500 <- env_num("SHARD_500", 50)
-M          <- as.integer(env_num("M", 5000)); L <- 2L; MIN_SIZE <- 3L
+MIN_SIZE   <- 3L
 S_GRID     <- as.numeric(strsplit(Sys.getenv("S_GRID", "1,2,4,8,16,32"), ",")[[1]])
 OUT        <- Sys.getenv("HD_MANIFEST", "dev/highdim/cluster/manifest.rds")
 
@@ -42,7 +43,7 @@ cells$N <- ifelse(cells$signal == "null", ifelse(cells$n == 500, N_NULL_500, N_N
                                           ifelse(cells$n == 500, N_POW_500, N_POW))
 cells$cell_id <- seq_len(nrow(cells))
 
-# Cost model (seconds per tested pair at M = 5000, L = 2, from local timings with
+# Cost model (seconds per tested pair at the defaults M = 5000, L = 2, from local timings with
 # an optimised BLAS: clustering + reconstruction per kernel step, statistics per
 # path point). Two eligible pairs per data set on average. Check it against the
 # smoke run: the runner logs the CPU seconds per pair.
@@ -58,7 +59,7 @@ man$task_id   <- seq_len(nrow(man))
 # disjoint seed blocks: cell c, shard k -> 1e7 + c * 1e5 + (k - 1) * shard size + 1..
 shard_size <- ifelse(man$n >= 500, SHARD_500, SHARD_SMALL)
 man$base_seed <- 1e7 + man$cell_id * 1e5 + (man$shard - 1) * shard_size
-man$M <- M; man$L <- L; man$min_size <- MIN_SIZE; man$K <- 3L
+man$min_size <- MIN_SIZE; man$K <- 3L
 man$cpu_h <- man$N_shard * 2 * t_pair(man$n, man$p) / 3600
 saveRDS(man, OUT)
 write.csv(man, sub("\\.rds$", "_tasks.csv", OUT), row.names = FALSE)

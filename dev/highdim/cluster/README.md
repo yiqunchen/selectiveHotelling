@@ -18,7 +18,7 @@ statistic adds only a few milliseconds per path point.
 | Mean shape | `line` (1-sparse, as in the main grid), `block` (1/4-sparse, as in the main grid), `dense` |
 | Signal size | s = δ² / sqrt(2 tr Σ²) in {1, 2, 4, 8, 16, 32}; null cells have s = 0 |
 | Data sets per cell | null 500 and power 200 for n ≤ 100; null 300 and power 100 for n = 500 |
-| Test | every pair whose clusters both have at least 3 rows; M = 5000, L = 2, `eps = "mixture"` |
+| Test | every pair whose clusters both have at least 3 rows; the package defaults (M = 5000, L = 2, Givens kernel, `eps = "mixture"`) |
 
 The statistics are `l2`, `cq`, `diag`, `diag_w`, `max`, `ridge`, `proj`, `t2` (the regular
 pooled T² with a 1e-8 ridge), the known-Σ `oracle`, and two min-p combinations,
